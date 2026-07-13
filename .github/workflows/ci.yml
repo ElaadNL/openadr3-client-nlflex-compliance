@@ -1,0 +1,142 @@
+# SPDX-FileCopyrightText: Contributors to openadr3-client-nlflex-compliance <https://github.com/ElaadNL/openadr3-client-nlflex-compliance>
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Python Default CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: Run zizmor 🌈
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # Required for upload-sarif (used by zizmor-action) to upload SARIF files.
+      contents: read # Only needed for private repos. Needed to clone the repo.
+      actions: read # Only needed for private repos. Needed for upload-sarif to read workflow run info.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor 🌈
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
+  codeqa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: "Set up Python"
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version-file: ".python-version"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          version: "0.9.22"
+          enable-cache: true
+
+      - id: install_dependencies
+        run: uv sync --locked --all-extras --dev
+
+      - name: Run formatter
+        run: |
+          mkdir format-logs
+          uv run task format-ci > format-logs/ruff-lint.log
+
+      - name: Upload formatter logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: formatter-log
+          path: format-logs
+
+      - name: Run linter
+        run: |
+          mkdir linter-logs
+          uv run task check-ci > linter-logs/ruff-lint.log
+
+      - name: Upload linter logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linter-log
+          path: linter-logs
+
+      - name: Run type checker
+        run: |
+          mkdir mypy-logs
+          uv run task mypy > mypy-logs/mypy-log.log
+
+      - name: Upload mypy logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mypy-log
+          path: mypy-logs
+
+      - name: Run bandit
+        run: |
+          mkdir bandit-logs
+          uv run task bandit > bandit-logs/bandit-log.log
+
+      - name: Upload bandit logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bandit-log
+          path: bandit-logs
+
+      - name: Run reuse
+        run: |
+          mkdir reuse-logs
+          uv run task reuse > reuse-logs/reuse-log.log
+
+      - name: Upload reuse logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reuse-log
+          path: reuse-logs
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          version: "0.9.22"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - id: install_dependencies
+        run: uv sync --locked --all-extras --dev
+
+      - id: run_tests
+        run: uv run pytest --cov . --cov-report xml
+
+      - name: Upload test coverage xml as artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-results
+          path: coverage.xml
