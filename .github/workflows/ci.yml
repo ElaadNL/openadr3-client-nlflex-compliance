@@ -20,6 +20,9 @@ jobs:
   zizmor:
     name: Run zizmor 🌈
     runs-on: ubuntu-latest
+    # SARIF upload requires GitHub Advanced Security / Code Security, only permitted
+    # for public repos under current org policy. Skip until this repo goes public.
+    if: ${{ !github.event.repository.private }}
     permissions:
       security-events: write # Required for upload-sarif (used by zizmor-action) to upload SARIF files.
       contents: read # Only needed for private repos. Needed to clone the repo.
