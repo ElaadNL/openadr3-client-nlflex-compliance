@@ -417,6 +417,7 @@ def test_existing_operational_status_report_no_resources() -> None:
             created_date_time=datetime(2026, 1, 1, tzinfo=UTC),
             modification_date_time=datetime(2026, 1, 1, tzinfo=UTC),
             eventID="test-event",
+            clientID="test-client",
             client_name="SP-ELAAD",
             report_name="OPERATIONAL_STATUS",
             resources=(),
