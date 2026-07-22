@@ -16,8 +16,6 @@ SPDX-License-Identifier: Apache-2.0
 
 This repository contains a plugin for the [OpenADR3-client](https://github.com/ElaadNL/openadr3-client) library that adds additional Pydantic validators to the OpenADR3 domain models to ensure NL-Flex compliance. Since NL-Flex compliance is a superset of OpenADR3, adding validation rules on top of the OpenADR3 models is sufficient to ensure compliance.
 
-The package currently implements the `nlflex01` profile, tracking the draft NL-Flex specification (version 0.1, not yet finalized as 1.0). See `spec/nlflex-spec-draft.pdf` for the specification this profile is based on.
-
 Registering the plugin is done using the global ValidatorPluginRegistry class:
 
 ```python

@@ -2,6 +2,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# Custom ignores
+
+# Spec references
+spec/*
+
+# End custom ignores
+
 # MacOs specific metadata
 .DS_Store
 
