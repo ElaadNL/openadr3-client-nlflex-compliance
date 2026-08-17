@@ -112,3 +112,52 @@ ignore = [
 # Ignores S101 ("Use of 'assert' detected") for the tests.
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "ANN201", "SLF001", "S106", "S105", "S311", "PLR2004", "PT018", "FBT003"]
+
+# Pyright, Pylance and basedpyright all read this block, so an editor agrees with CI rather than
+# reporting diagnostics the project has already decided against.
+#
+# This is `[tool.basedpyright]`, not `[tool.pyright]`, and that is not a style choice: basedpyright
+# refuses to start if both sections are present ("Pyproject file cannot have both `pyright` and
+# `basedpyright` sections. pick one"), and when that happens it does not fail the run - it silently
+# falls back to running with no project configuration at all, which is worse than picking wrong.
+# Plain pyright, in turn, does not recognise `[tool.basedpyright]` and simply ignores the whole
+# table, which is fine here: every rule below is one that basedpyright enables by default and
+# pyright does not, so pyright's own defaults already agree with us without reading any of this.
+[tool.basedpyright]
+
+# Long validation messages are split across lines to stay inside the 120 column limit, which is
+# what `ruff format` produces. The ruff ISC001 and ISC003 ignores above record the same decision;
+# without this, an editor with reportImplicitStringConcatenation enabled flags every one of them.
+reportImplicitStringConcatenation = false
+
+# openadr3-client ships py.typed but leaves its generics - Attribute, ValuesMap, Interval and
+# friends - unparameterised. Importing and using any of its models therefore gives basedpyright a
+# type it cannot resolve to a parameterised generic. That is a property of the dependency, not of
+# our code, and annotating around it here would mean inventing type arguments the library does not
+# itself commit to, so the five rules below are disabled project-wide rather than suppressed
+# call-by-call.
+reportUnknownMemberType = false
+reportUnknownArgumentType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportMissingTypeArgument = false
+
+# plugin.register_model_validator(...) returns the plugin for chaining and
+# ValidatorPluginRegistry.clear_plugins() returns the registry; call sites that construct an object
+# solely to trigger its validators (most of the test suite) or call clear_plugins() as a fixture
+# teardown intentionally discard that return value. Ignoring it is the intended usage, not an
+# oversight.
+reportUnusedCallResult = false
+
+# The `_UNSET: Any = object()` sentinel every test builder compares against, and the
+# `*_args: Any, **_kwargs: Any` on `setup()` (which must match the base class signature), are
+# deliberate uses of Any rather than unannotated code. The same root cause also surfaces as
+# reportAny at a couple of call sites where our own validators read `getattr(obj, name, default)`:
+# a field declared on only some subtypes of a model (for example `targets` on `NewResourceBlRequest`
+# but not on the shared `Resource` base every validator is registered against) has no type
+# basedpyright can assign it other than Any.
+reportExplicitAny = false
+reportAny = false
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
