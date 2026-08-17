@@ -32,7 +32,7 @@ from pydantic import ValidationError
 from openadr3_client_nlflex_compliance.nlflex10.plugin import Nlflex10ValidatorPlugin
 
 SERVICE_PROVIDER_EAN13 = "8712345678906"
-DSO_EAN13 = "8719876543215"
+DSO_EAN13 = "8716871000002"  # Liander, from the DSO identifiers table
 
 
 @pytest.fixture(autouse=True)

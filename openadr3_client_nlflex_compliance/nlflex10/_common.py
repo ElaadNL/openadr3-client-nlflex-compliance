@@ -54,10 +54,12 @@ def error(message: str, loc: str, value: object) -> InitErrorDetails:
 # Group-IDs and Asset-IDs are neither EANs nor UUIDs. They are assigned by the BL and by the Service
 # Provider respectively and have no format this profile constrains, so they have no validator here.
 #
-# The specification names six DSOs as a closed set, each with a fixed EAN13 (see "DSO identifiers"),
-# but this package deliberately validates the EAN13 shape only and does not check membership of that
-# set, so that a seventh DSO added to a future edition of the table does not require a release of this
-# package.
+# The DSO identifiers are a closed set (see "DSO identifiers"): "Each DSO MUST be identified by its
+# EAN13 code. The following codes MUST be used", followed by six entries. Membership is therefore
+# enforced, not just the EAN13 shape - a well formed EAN13 that names no Dutch DSO is not a DSO_ID.
+# Service Provider identifiers are the opposite case: that section names no table, since a Service
+# Provider obtains its EAN13 by registering as a Congestion Service Provider, so those are validated
+# on shape alone.
 # --------------------------------------------------------------------------------------------------------------
 
 EAN13_LENGTH = 13
@@ -93,6 +95,30 @@ def _is_ean(value: object, length: int) -> bool:
 def is_ean13(value: object) -> bool:
     """Validates that the value is the EAN13 code of a market party, such as a DSO or a Service Provider."""
     return _is_ean(value, EAN13_LENGTH)
+
+
+# See the "DSO identifiers" table. A seventh DSO joining a future edition of the profile needs this
+# set extended, which is the intended coupling: the table is normative.
+KNOWN_DSO_IDENTIFIERS = frozenset(
+    {
+        "8716916000004",  # Coteq
+        "8712423014022",  # Enexis
+        "8716871000002",  # Liander
+        "8716912000008",  # Rendo
+        "8716892000005",  # Stedin
+        "8716878999996",  # Westland Infra
+    }
+)
+
+
+def is_dso_identifier(value: object) -> bool:
+    """
+    Validates that the value is one of the DSO identifiers the specification names.
+
+    The profile fixes the identifier of every Dutch DSO, so an EAN13 outside that table identifies
+    no DSO this profile knows, however well formed it is.
+    """
+    return value in KNOWN_DSO_IDENTIFIERS
 
 
 def is_ean18(value: object) -> bool:

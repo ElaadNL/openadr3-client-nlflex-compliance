@@ -19,7 +19,7 @@ def _default_valid_attributes() -> list[Attribute]:
     """Helper function to create the attributes of the specification's program example."""
     return [
         Attribute(type="PROGRAM_TYPE", values=("DSO_SP_INTERFACE-1.0.0",)),
-        Attribute(type="RETAILER_NAME", values=("8719876543215",)),
+        Attribute(type="RETAILER_NAME", values=("8716871000002",)),
         Attribute(type="RETAILER_LONG_NAME", values=("ElaadNL",)),
         Attribute(type="COUNTRY", values=("NL",)),
         Attribute(type="BINDING_EVENTS", values=(True,)),
@@ -119,3 +119,11 @@ def test_a_program_without_attributes_is_rejected() -> None:
 
     assert errors is not None
     assert len(errors) == 3
+
+
+def test_a_valid_ean13_that_names_no_dso_is_rejected_as_retailer_name() -> None:
+    """RETAILER_NAME identifies the issuing DSO, and the profile fixes which codes those are."""
+    errors = validate_program_nlflex_compliant(_create_program(_replacing("RETAILER_NAME", ("8712345678906",))))
+
+    assert errors is not None
+    assert any("DSO identifiers table" in str(error["type"]) for error in errors)

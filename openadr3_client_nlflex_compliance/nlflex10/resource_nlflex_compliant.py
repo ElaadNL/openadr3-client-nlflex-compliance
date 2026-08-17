@@ -17,7 +17,7 @@ from openadr3_client._models.common.ven_resource_attribute_type import VenResour
 from openadr3_client.oadr310.models.resource.resource import Resource
 from pydantic_core import InitErrorDetails
 
-from openadr3_client_nlflex_compliance.nlflex10._common import error, is_ean13, is_ean18
+from openadr3_client_nlflex_compliance.nlflex10._common import error, is_dso_identifier, is_ean18
 
 # See the "Flex types" table.
 KNOWN_FLEX_TYPES = frozenset({"EVSE", "HB", "HPE", "HPH", "PV"})
@@ -59,11 +59,11 @@ def _dso_id_attribute_compliant(self: Resource) -> list[InitErrorDetails]:
     if dso_id is None:
         return [error("The resource must have a DSO_ID attribute.", "attributes", self.attributes)]
 
-    if not dso_id.values or not all(is_ean13(value) for value in dso_id.values):
+    if not dso_id.values or not all(is_dso_identifier(value) for value in dso_id.values):
         return [
             error(
-                "The DSO_ID attribute must be the DSO identifier of the responsible DSO, which is an EAN13 of "
-                "13 digits with a valid check digit (for example '8716871000002').",
+                "The DSO_ID attribute must be the identifier of the responsible DSO. The profile fixes these: the "
+                "value must be one of the six EAN13 codes in the DSO identifiers table.",
                 "attributes",
                 self.attributes,
             )
