@@ -17,7 +17,11 @@ required, the prose says they arrive together, and the specification's own examp
 group with none of them and an established group with all four.
 
 The children of a group are pointers the BL keeps valid and that a VEN sees only in part, following
-the OpenADR object privacy rules, so they carry nothing to validate here.
+the OpenADR object privacy rules. Their ids are deliberately not validated: the specification is
+explicit that an id is "treated as an unvalidated string", because a VEN is shown only the children
+it may resolve and must ignore the rest, so an id it cannot resolve is expected rather than wrong.
+The child type is a different matter, and is enforced: the resource group extension permits a
+nested resource_group, and this profile does not use one.
 """
 
 from openadr3_client._models.common.attribute import Attribute
@@ -26,6 +30,10 @@ from openadr3_client.extensions.resource_group.models.resource_group import Reso
 from pydantic_core import InitErrorDetails
 
 from openadr3_client_nlflex_compliance.nlflex10._common import as_power_value, error, is_ean13
+
+# The resource group extension permits a nested resource_group as a child; this profile uses only
+# member assets.
+VEN_RESOURCE_CHILD_TYPE = "ven_resource"
 
 # The maximum availability duration of the group's assets, which caps the duration of a dispatch.
 KNOWN_MAX_DURATIONS = frozenset({"PT2H", "PT4H", "PT6H"})
@@ -228,6 +236,32 @@ def _computed_capacity_attributes_compliant(self: ResourceGroup) -> list[InitErr
     return validation_errors
 
 
+def _children_compliant(self: ResourceGroup) -> list[InitErrorDetails]:
+    """
+    Validates that every child of the group is a member asset.
+
+    The resource group extension allows a child to be either a ven_resource or a nested
+    resource_group. This profile uses only the first: a group models a set of DERs behind one
+    congestion point, not a hierarchy of groups.
+
+    The id a child points at is not validated. The specification treats it as an unvalidated string
+    because a VEN is shown only the children it is permitted to resolve.
+    """
+    offending = [child for child in self.children if child.type != VEN_RESOURCE_CHILD_TYPE]
+
+    if offending:
+        return [
+            error(
+                "Every resource group child must be of type 'ven_resource'. A nested resource_group is "
+                "permitted by the resource group extension but is not used in this profile.",
+                "children",
+                self.children,
+            )
+        ]
+
+    return []
+
+
 def validate_resource_group_nlflex_compliant(resource_group: ResourceGroup) -> list[InitErrorDetails] | None:
     """
     Validates that a resource group is compliant with the OpenADR DER profile specification v1.0.0.
@@ -242,6 +276,7 @@ def validate_resource_group_nlflex_compliant(resource_group: ResourceGroup) -> l
     validation_errors: list[InitErrorDetails] = []
 
     validation_errors.extend(_targets_compliant(resource_group))
+    validation_errors.extend(_children_compliant(resource_group))
     validation_errors.extend(_dso_id_attribute_compliant(resource_group))
     validation_errors.extend(_service_provider_id_attribute_compliant(resource_group))
     validation_errors.extend(_congestion_point_id_attribute_compliant(resource_group))
