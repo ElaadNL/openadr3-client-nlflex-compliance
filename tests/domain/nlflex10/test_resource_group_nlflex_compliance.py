@@ -228,6 +228,52 @@ def test_a_non_numeric_evse_baseline_override_is_rejected() -> None:
     assert any("EVSE_BASELINE_OVERRIDE" in str(error["type"]) for error in errors)
 
 
+def test_a_ven_resource_child_is_valid() -> None:
+    """A group's children are its member assets, which is what the profile uses."""
+    group = _create_resource_group()
+
+    assert validate_resource_group_nlflex_compliant(group) is None
+
+
+def test_a_nested_resource_group_child_is_rejected() -> None:
+    """The extension permits a nested resource_group; this profile does not use one."""
+    group = NewResourceGroup(
+        resource_group_name="GROUP-0001",
+        targets=("GROUP-0001",),
+        attributes=ValuesMap(_default_valid_attributes()),
+        children=(ResourceGroupChild(type="resource_group", id="60000000-0000-4000-8000-000000000001"),),
+    )
+
+    errors = validate_resource_group_nlflex_compliant(group)
+
+    assert errors is not None
+    assert any("must be of type 'ven_resource'" in str(error["type"]) for error in errors)
+
+
+def test_a_group_without_children_is_valid() -> None:
+    """A freshly created group has no members yet, which the specification's own example shows."""
+    group = NewResourceGroup(
+        resource_group_name="GROUP-0001",
+        targets=("GROUP-0001",),
+        attributes=ValuesMap(_default_valid_attributes()),
+        children=(),
+    )
+
+    assert validate_resource_group_nlflex_compliant(group) is None
+
+
+def test_a_child_id_is_not_validated() -> None:
+    """An id is an unvalidated string: a VEN sees only the children it may resolve."""
+    group = NewResourceGroup(
+        resource_group_name="GROUP-0001",
+        targets=("GROUP-0001",),
+        attributes=ValuesMap(_default_valid_attributes()),
+        children=(ResourceGroupChild(type="ven_resource", id="not-a-uuid"),),
+    )
+
+    assert validate_resource_group_nlflex_compliant(group) is None
+
+
 def test_a_group_without_attributes_is_rejected() -> None:
     """The four required attributes are missing, and all four are reported."""
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(attributes=None))
