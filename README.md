@@ -14,18 +14,28 @@ SPDX-License-Identifier: Apache-2.0
 
 # OpenADR3 client
 
-This repository contains a plugin for the [OpenADR3-client](https://github.com/ElaadNL/openadr3-client) library that adds additional Pydantic validators to the OpenADR3 domain models to ensure NL-Flex compliance. Since NL-Flex compliance is a superset of OpenADR3, adding validation rules on top of the OpenADR3 models is sufficient to ensure compliance.
+This repository contains a plugin for the [OpenADR3-client](https://github.com/ElaadNL/openadr3-client) library that adds additional Pydantic validators to the OpenADR3 domain models to ensure compliance with the OpenADR DER profile specification, the Dutch DSO to Service Provider interface. Since compliance with the profile is a superset of OpenADR3, adding validation rules on top of the OpenADR3 models is sufficient to ensure compliance.
 
 Registering the plugin is done using the global ValidatorPluginRegistry class:
 
 ```python
-    from openadr3_client.plugin import ValidatorPluginRegistry, ValidatorPlugin
-    from openadr3_client_nlflex_compliance.nlflex01.plugin import Nlflex01ValidatorPlugin
+    from openadr3_client.plugin import ValidatorPluginRegistry
+    from openadr3_client_nlflex_compliance.nlflex10.plugin import Nlflex10ValidatorPlugin
 
     ValidatorPluginRegistry.register_plugin(
-        Nlflex01ValidatorPlugin().setup()
+        Nlflex10ValidatorPlugin.setup()
     )
 ```
+
+## Version support
+
+The package provides a validator implementation per version of the profile specification, in a subpackage named for that version:
+
+- **Nlflex10ValidatorPlugin** (`nlflex10`): OpenADR DER profile specification v1.0.0
+
+The specification each plugin validates against ships in the `spec/` directory of this repository, together with the worked message examples the test suite validates against.
+
+Register the plugin for the version of the specification you implement. An earlier plugin, `Nlflex01ValidatorPlugin`, validated the unreleased NL-Flex v0.1 draft and has been removed: the released v1.0.0 contradicts that draft on several rules rather than only extending it.
 
 ## License
 
