@@ -29,7 +29,7 @@ from openadr3_client._models.common.ven_resource_attribute_type import VenResour
 from openadr3_client.extensions.resource_group.models.resource_group import ResourceGroup
 from pydantic_core import InitErrorDetails
 
-from openadr3_client_nlflex_compliance.nlflex10._common import as_power_value, error, is_ean13
+from openadr3_client_nlflex_compliance.nlflex10._common import as_power_value, error, is_dso_identifier, is_ean13
 
 # The resource group extension permits a nested resource_group as a child; this profile uses only
 # member assets.
@@ -75,11 +75,11 @@ def _dso_id_attribute_compliant(self: ResourceGroup) -> list[InitErrorDetails]:
     if dso_id is None:
         return [error("The resource group must have a DSO_ID attribute.", "attributes", self.attributes)]
 
-    if not dso_id.values or not all(is_ean13(value) for value in dso_id.values):
+    if not dso_id.values or not all(is_dso_identifier(value) for value in dso_id.values):
         return [
             error(
-                "The DSO_ID attribute must be the DSO identifier of the responsible DSO, which is an EAN13 of "
-                "13 digits with a valid check digit (for example '8716871000002').",
+                "The DSO_ID attribute must be the identifier of the responsible DSO. The profile fixes these: the "
+                "value must be one of the six EAN13 codes in the DSO identifiers table.",
                 "attributes",
                 self.attributes,
             )

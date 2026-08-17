@@ -45,10 +45,6 @@ from openadr3_client_nlflex_compliance.nlflex10._common import as_power_value, e
 # The anchor event carries no DR signals. It is the "report-only event with VEN-determined intervals"
 # of [OADR3-UG] section 7.5: an event with no intervals of its own, whose reportDescriptors request a
 # stream of reports the VEN sends at moments of its own choosing.
-#
-# Two rules of that chapter are about the lifetime of the event rather than its shape and cannot be
-# checked from a single object: there is exactly one anchor event per program, and the BL MUST NOT
-# delete it while the program is in use.
 # --------------------------------------------------------------------------------------------------------------
 
 REGISTRATION_REQUEST_PAYLOAD_TYPE = ReportPayloadType("REGISTRATION_REQUEST")

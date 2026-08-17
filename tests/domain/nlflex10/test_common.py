@@ -5,7 +5,9 @@
 import pytest
 
 from openadr3_client_nlflex_compliance.nlflex10._common import (
+    KNOWN_DSO_IDENTIFIERS,
     as_power_value,
+    is_dso_identifier,
     is_ean13,
     is_ean18,
     is_power_value,
@@ -141,3 +143,26 @@ def test_is_power_value_mirrors_as_power_value() -> None:
     """The predicate is the conversion, read as a question."""
     assert is_power_value(500)
     assert not is_power_value(1.234)
+
+
+@pytest.mark.parametrize("identifier", sorted(KNOWN_DSO_IDENTIFIERS))
+def test_every_dso_in_the_table_is_a_dso_identifier(identifier: str) -> None:
+    """The specification names six DSOs and fixes the EAN13 of each."""
+    assert is_dso_identifier(identifier)
+
+
+def test_the_table_holds_exactly_the_six_dsos_named() -> None:
+    """A seventh entry means the specification changed and this set must change with it."""
+    assert len(KNOWN_DSO_IDENTIFIERS) == 6
+
+
+def test_a_valid_ean13_that_names_no_dso_is_not_a_dso_identifier() -> None:
+    """The specification says the listed codes must be used, so an EAN13 outside the table names no DSO."""
+    assert is_ean13("8712345678906")
+    assert not is_dso_identifier("8712345678906")
+
+
+def test_the_specifications_fictional_dso_code_is_not_a_dso_identifier() -> None:
+    """The worked examples use a fictional EAN13 as a placeholder; it names no real DSO."""
+    assert is_ean13("8719876543215")
+    assert not is_dso_identifier("8719876543215")

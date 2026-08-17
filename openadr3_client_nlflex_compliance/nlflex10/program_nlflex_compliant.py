@@ -18,7 +18,7 @@ from openadr3_client.oadr310.models.program.program import Program
 from openadr3_client.oadr310.models.program.program_attribute import ProgramAttributeType
 from pydantic_core import InitErrorDetails
 
-from openadr3_client_nlflex_compliance.nlflex10._common import error, is_ean13
+from openadr3_client_nlflex_compliance.nlflex10._common import error, is_dso_identifier
 
 # PROGRAM_TYPE MUST equal "DSO_SP_INTERFACE-x.x.x", where x.x.x is the version of this
 # specification, which follows the Semantic Versioning standard.
@@ -71,11 +71,11 @@ def _retailer_name_attribute_compliant(self: Program) -> list[InitErrorDetails]:
             error("The program must have a RETAILER_NAME attribute.", "attributes", self.attributes),
         ]
 
-    if not retailer_name.values or not all(is_ean13(value) for value in retailer_name.values):
+    if not retailer_name.values or not all(is_dso_identifier(value) for value in retailer_name.values):
         return [
             error(
-                "The RETAILER_NAME attribute must be the DSO identifier of the issuing DSO, which is an EAN13 "
-                "of 13 digits with a valid check digit (for example '8716871000002').",
+                "The RETAILER_NAME attribute must be the identifier of the issuing DSO. The profile fixes these: the "
+                "value must be one of the six EAN13 codes in the DSO identifiers table.",
                 "attributes",
                 self.attributes,
             )

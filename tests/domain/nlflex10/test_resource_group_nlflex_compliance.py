@@ -18,7 +18,7 @@ from openadr3_client_nlflex_compliance.nlflex10.resource_group_nlflex_compliant 
 
 _UNSET: Any = object()
 
-DSO_EAN13 = "8719876543215"
+DSO_EAN13 = "8716871000002"  # Liander, from the DSO identifiers table
 SERVICE_PROVIDER_EAN13 = "8712345678906"
 
 COMPUTED_ATTRIBUTE_TYPES = (
@@ -280,3 +280,11 @@ def test_a_group_without_attributes_is_rejected() -> None:
 
     assert errors is not None
     assert len(errors) == 4
+
+
+def test_a_valid_ean13_that_names_no_dso_is_rejected_as_dso_id() -> None:
+    """DSO_ID names the responsible DSO, and the profile fixes which codes those are."""
+    errors = validate_resource_group_nlflex_compliant(_create_resource_group(_replacing("DSO_ID", ("8712345678906",))))
+
+    assert errors is not None
+    assert any("DSO identifiers table" in str(error["type"]) for error in errors)
