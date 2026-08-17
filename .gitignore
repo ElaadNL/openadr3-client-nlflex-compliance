@@ -158,3 +158,16 @@ cython_debug/
 
 # Default pytest output
 test-output.xml
+
+# The OpenADR DER profile specification is not redistributed from this repository. Obtain the
+# release bundle separately and place it under spec/, which the Spec references rule above already
+# ignores in full.
+
+# Design and planning documents. Kept locally, not published from this repository.
+docs/superpowers/
+
+# Local agent tooling scratch space. Both directories carry their own nested .gitignore, but those
+# are written by the tools themselves and only cover the subdirectory they sit in, so they are
+# ignored here too: this file is the one place that keeps their contents out of a commit.
+.agent-grid/
+.superpowers/
