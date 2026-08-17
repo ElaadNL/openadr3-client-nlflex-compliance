@@ -678,7 +678,6 @@ wheels = [
 
 [[package]]
 name = "openadr3-client-nlflex-compliance"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "openadr3-client" },

@@ -4,7 +4,7 @@
 
 [project]
 name = "openadr3-client-nlflex-compliance"
-version = "0.1.0"
+dynamic = ["version"]
 description = "NL Flex compliance validation plugin for the OpenADR3 client."
 authors = []
 requires-python = ">=3.12, <4"
@@ -23,7 +23,7 @@ Changelog = "https://github.com/ElaadNL/openadr3-client/releases"
 
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
@@ -36,6 +36,9 @@ dev = [
     "reuse>=6.2.0",
     "pre-commit>=4.6.0",
 ]
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.hatch.build.targets.sdist]
 include = ["openadr3_client_nlflex_compliance"]
@@ -108,4 +111,4 @@ ignore = [
 
 # Ignores S101 ("Use of 'assert' detected") for the tests.
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "ANN201", "SLF001", "S106", "S105", "S311", "PLR2004", "PT018"]
+"tests/*" = ["S101", "ANN201", "SLF001", "S106", "S105", "S311", "PLR2004", "PT018", "FBT003"]
