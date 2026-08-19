@@ -19,12 +19,10 @@ This repository contains a plugin for the [OpenADR3-client](https://github.com/E
 Registering the plugin is done using the global ValidatorPluginRegistry class:
 
 ```python
-    from openadr3_client.plugin import ValidatorPluginRegistry
-    from openadr3_client_nlflex_compliance.nlflex10.plugin import Nlflex10ValidatorPlugin
+from openadr3_client.plugin import ValidatorPluginRegistry
+from openadr3_client_nlflex_compliance.nlflex10.plugin import Nlflex10ValidatorPlugin
 
-    ValidatorPluginRegistry.register_plugin(
-        Nlflex10ValidatorPlugin.setup()
-    )
+ValidatorPluginRegistry.register_plugin(Nlflex10ValidatorPlugin.setup())
 ```
 
 ## Version support
