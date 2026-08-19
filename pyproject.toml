@@ -29,7 +29,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "mypy>=2.1.0,<3",
-    "ruff>=0.15.17,<0.16",
+    "ruff>=0.16.0,<0.17",
     "pytest>=9.1.0,<10",
     "pytest-cov>=6.1.1,<8",
     "taskipy>=1.14.1,<2",
@@ -108,6 +108,13 @@ ignore = [
     "TC001", # Move to type checking block (does not play nice with pydantic models)
     "TC002", # Move to type checking block (does not play nice with pydantic models)
 ]
+
+# CPY001 became stable in ruff 0.16 and `select = ["ALL"]` picks it up. Its default pattern wants
+# `Copyright <year>`, which no file here has: licensing is expressed as REUSE headers, and
+# `reuse annotate --exclude-year` deliberately leaves the year out. Pointing the rule at the header
+# the project actually writes keeps the check enforcing something instead of being switched off.
+[tool.ruff.lint.flake8-copyright]
+notice-rgx = "SPDX-FileCopyrightText:"
 
 # Ignores S101 ("Use of 'assert' detected") for the tests.
 [tool.ruff.lint.per-file-ignores]
