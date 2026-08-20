@@ -118,6 +118,10 @@ def _registration_status_attribute_compliant(self: Resource) -> list[InitErrorDe
     REGISTRATION_STATUS is set by the BL when an asset is registered on a resource group, and
     removed again when it is deregistered, so an absent status is not an error. REJECTED_REASON MUST
     be present whenever the status is REJECTED, and MUST be one of the rejection reasons.
+
+    The reverse also holds: an ENROLLED asset carries no REJECTED_REASON. The attribute only ever
+    describes why an earlier registration failed, and the BL wipes it once the asset is enrolled, so
+    a leftover reason on an enrolled asset says the registration state was never fully cleaned up.
     """
     validation_errors: list[InitErrorDetails] = []
 
@@ -136,6 +140,20 @@ def _registration_status_attribute_compliant(self: Resource) -> list[InitErrorDe
             error(
                 "The REGISTRATION_STATUS attribute must be one of the registration statuses in the "
                 "registration status values table.",
+                "attributes",
+                self.attributes,
+            )
+        )
+
+    if (
+        "ENROLLED" in registration_status.values
+        and "REJECTED" not in registration_status.values
+        and self.attributes.get_by_type(REJECTED_REASON_ATTRIBUTE) is not None
+    ):
+        validation_errors.append(
+            error(
+                "The resource must not carry a REJECTED_REASON attribute once REGISTRATION_STATUS is ENROLLED. The "
+                "reason describes an earlier failed registration and is wiped by the BL on enrolment.",
                 "attributes",
                 self.attributes,
             )

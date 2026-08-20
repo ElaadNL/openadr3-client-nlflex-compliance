@@ -186,6 +186,19 @@ def test_an_unknown_rejection_reason_is_rejected() -> None:
     assert any("rejection reasons" in str(error["type"]) for error in errors)
 
 
+def test_an_enrolled_resource_must_not_carry_a_rejection_reason() -> None:
+    """A REJECTED_REASON from an earlier failed registration is wiped by the BL on enrolment."""
+    attributes = [
+        *_default_valid_attributes(),
+        Attribute(type="REJECTED_REASON", values=("WRONG_EAN",)),
+    ]
+
+    errors = validate_resource_nlflex_compliant(_create_resource(attributes))
+
+    assert errors is not None
+    assert any("once REGISTRATION_STATUS is ENROLLED" in str(error["type"]) for error in errors)
+
+
 def test_a_resource_without_attributes_is_rejected() -> None:
     """The three required attributes are missing, and all three are reported."""
     errors = validate_resource_nlflex_compliant(_create_resource(attributes=None))
