@@ -4,6 +4,7 @@
 
 from typing import Any
 
+import pytest
 from openadr3_client._models.common.attribute import Attribute
 from openadr3_client._models.common.value_map_collection import ValuesMap
 from openadr3_client.oadr310.models.program.program import NewProgram
@@ -95,6 +96,20 @@ def test_every_dso_identifier_in_the_specification_is_accepted() -> None:
         "8716878999996",
     ):
         assert validate_program_nlflex_compliant(_create_program(_replacing("RETAILER_NAME", (identifier,)))) is None
+
+
+def test_gopacs_is_accepted_as_retailer_name() -> None:
+    """A program issued through GOPACS names GOPACS rather than a DSO."""
+    assert validate_program_nlflex_compliant(_create_program(_replacing("RETAILER_NAME", ("GOPACS",)))) is None
+
+
+@pytest.mark.parametrize("retailer_name", ["gopacs", "GOPACS ", "GOPACS-NL"])
+def test_gopacs_must_match_exactly_as_retailer_name(retailer_name: str) -> None:
+    """Only the exact string GOPACS is accepted in place of a DSO identifier."""
+    errors = validate_program_nlflex_compliant(_create_program(_replacing("RETAILER_NAME", (retailer_name,))))
+
+    assert errors is not None
+    assert any("RETAILER_NAME" in str(error["type"]) for error in errors)
 
 
 def test_binding_events_is_required() -> None:
