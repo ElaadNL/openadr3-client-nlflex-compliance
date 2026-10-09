@@ -33,7 +33,7 @@ from openadr3_client_nlflex_compliance.nlflex10.event_nlflex_compliant import (
 _UNSET: Any = object()
 
 # The worked example of "Flexibility dispatch event": a window opening at the publication deadline
-# plus 24h, holding a PT4H dispatch of 200 KW flanked by two adjacent hours.
+# plus 24h, holding a PT4H dispatch of 200 KW flanked by an hour of FLEX 0 either side.
 WINDOW_START = datetime(2026, 1, 2, 7, 0, 0, tzinfo=UTC)
 
 
@@ -981,9 +981,9 @@ def test_an_override_with_three_decimals_is_rejected() -> None:
 
 FLEX = EventPayloadType("FLEX")
 
-FIRST_ADJACENT_HOUR_START = datetime(2026, 1, 2, 16, 0, 0, tzinfo=UTC)
+PRE_DISPATCH_START = datetime(2026, 1, 2, 16, 0, 0, tzinfo=UTC)
 DISPATCH_START = datetime(2026, 1, 2, 17, 0, 0, tzinfo=UTC)
-SECOND_ADJACENT_HOUR_START = datetime(2026, 1, 2, 21, 0, 0, tzinfo=UTC)
+POST_DISPATCH_START = datetime(2026, 1, 2, 21, 0, 0, tzinfo=UTC)
 
 
 def _default_valid_dispatch_payload_descriptors() -> tuple[EventPayloadDescriptor, ...]:
@@ -1018,11 +1018,11 @@ def _dispatch_interval(
 
 
 def _default_valid_dispatch_intervals() -> tuple[Interval[EventPayload], ...]:
-    """Helper function to create a dispatch flanked by an adjacent hour either side."""
+    """Helper function to create a PT4H dispatch flanked by an hour of FLEX 0 either side."""
     return (
-        _dispatch_interval(0, FIRST_ADJACENT_HOUR_START, timedelta(hours=1), 0),
+        _dispatch_interval(0, PRE_DISPATCH_START, timedelta(hours=1), 0),
         _dispatch_interval(1, DISPATCH_START, timedelta(hours=4), 200),
-        _dispatch_interval(2, SECOND_ADJACENT_HOUR_START, timedelta(hours=1), 0),
+        _dispatch_interval(2, POST_DISPATCH_START, timedelta(hours=1), 0),
     )
 
 
@@ -1157,7 +1157,7 @@ def test_event_window_is_one_day() -> None:
 
 
 def test_intervals_must_fall_within_the_window() -> None:
-    """Every interval, adjacent hours included, sits inside the event's own window."""
+    """Every interval sits inside the event's own window."""
     event = _create_dispatch_event(
         intervals=(_dispatch_interval(0, WINDOW_START + timedelta(days=1), timedelta(hours=2), 100),)
     )
@@ -1166,28 +1166,6 @@ def test_intervals_must_fall_within_the_window() -> None:
 
     assert errors is not None
     assert any("within the event-level" in str(error["type"]) for error in errors)
-
-
-def test_dispatch_duration_must_be_two_four_or_six_hours() -> None:
-    """A dispatch lasts PT2H, PT4H or PT6H; anything else is neither dispatch nor adjacent hour."""
-    event = _create_dispatch_event(intervals=(_dispatch_interval(0, DISPATCH_START, timedelta(hours=3), 100),))
-
-    errors = validate_flex_dispatch_event_compliant(event)
-
-    assert errors is not None
-    assert any("adjacent hour of PT1H or a dispatch" in str(error["type"]) for error in errors)
-
-
-def test_adjacent_hour_calls_nothing() -> None:
-    """An adjacent hour caps the group at its ACTIVE_BASELINE, so its FLEX value is 0."""
-    event = _create_dispatch_event(
-        intervals=(_dispatch_interval(0, FIRST_ADJACENT_HOUR_START, timedelta(hours=1), 50),)
-    )
-
-    errors = validate_flex_dispatch_event_compliant(event)
-
-    assert errors is not None
-    assert any("FLEX value of 0" in str(error["type"]) for error in errors)
 
 
 def test_flex_value_cannot_be_negative() -> None:
@@ -1242,16 +1220,46 @@ def test_gaps_between_intervals_are_allowed() -> None:
     assert validate_flex_dispatch_event_compliant(event) is None
 
 
-def test_interval_payload_must_be_a_single_flex_value() -> None:
-    """Each interval carries exactly one FLEX payload with a single value in KW."""
+def _flex_values_interval(start: datetime, duration: timedelta, values: tuple[Any, ...]) -> Interval[EventPayload]:
+    """Helper function to create a single event interval whose FLEX payload carries the given values."""
+    return Interval(
+        id=0,
+        interval_period=IntervalPeriod(start=start, duration=duration),
+        payloads=(EventPayload(type=FLEX, values=values),),
+    )
+
+
+def test_a_flex_payload_with_multiple_values_is_valid() -> None:
+    """The FLEX payload carries a list of values; the profile does not prescribe how many."""
+    event = _create_dispatch_event(
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, 200, 150.25)),)
+    )
+
+    assert validate_flex_dispatch_event_compliant(event) is None
+
+
+def test_a_flex_payload_without_values_is_rejected() -> None:
+    """The list of FLEX values must not be empty; built unvalidated, as the base model rejects it too."""
     event = _create_dispatch_event(
         intervals=(
             Interval(
                 id=0,
                 interval_period=IntervalPeriod(start=DISPATCH_START, duration=timedelta(hours=2)),
-                payloads=(EventPayload(type=FLEX, values=(100, 200)),),
+                payloads=(EventPayload.model_construct(type=FLEX, values=()),),
             ),
         )
+    )
+
+    errors = validate_flex_dispatch_event_compliant(event)
+
+    assert errors is not None
+    assert any("at least one value" in str(error["type"]) for error in errors)
+
+
+def test_every_flex_value_is_checked_for_decimals() -> None:
+    """A single value with three decimals among valid ones rejects the payload."""
+    event = _create_dispatch_event(
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, 200.125)),)
     )
 
     errors = validate_flex_dispatch_event_compliant(event)
@@ -1260,11 +1268,63 @@ def test_interval_payload_must_be_a_single_flex_value() -> None:
     assert any("at most two decimals" in str(error["type"]) for error in errors)
 
 
-def test_dispatch_must_not_exceed_group_max_duration() -> None:
-    """A dispatch interval fits within the MAX_DURATION of the group it targets."""
+def test_every_flex_value_is_checked_for_type() -> None:
+    """A boolean among valid values rejects the payload."""
+    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, True)),))
+
+    errors = validate_flex_dispatch_event_compliant(event)
+
+    assert errors is not None
+    assert any("at most two decimals" in str(error["type"]) for error in errors)
+
+
+def test_every_flex_value_is_checked_for_sign() -> None:
+    """A negative value among valid ones rejects the payload."""
+    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, -10)),))
+
+    errors = validate_flex_dispatch_event_compliant(event)
+
+    assert errors is not None
+    assert any("larger than zero" in str(error["type"]) for error in errors)
+
+
+def test_every_flex_value_is_bounded_by_offered_flexibility() -> None:
+    """A single value above the group's ACTIVE_AVAILABLE_FLEX rejects the call."""
+    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (10, 20)),))
+
+    errors = validate_flex_dispatch_event_compliant(event, max_callable_kw=12.5)
+
+    assert errors is not None
+    assert any("ACTIVE_AVAILABLE_FLEX" in str(error["type"]) for error in errors)
+
+
+def test_an_interval_may_have_any_duration() -> None:
+    """The profile no longer prescribes interval durations."""
     event = _create_dispatch_event(
-        intervals=(_dispatch_interval(0, WINDOW_START + timedelta(hours=1), timedelta(hours=6), 100),)
+        intervals=(
+            _dispatch_interval(0, DISPATCH_START, timedelta(hours=3), 100),
+            _dispatch_interval(1, DISPATCH_START + timedelta(hours=3), timedelta(minutes=30), 0),
+        )
     )
+
+    assert validate_flex_dispatch_event_compliant(event) is None
+
+
+def test_flex_values_of_zero_do_not_count_towards_max_duration() -> None:
+    """A PT4H call flanked by FLEX 0 on both sides spans six hours against a PT4H group, and is valid."""
+    assert validate_flex_dispatch_event_compliant(_create_dispatch_event(), max_duration=timedelta(hours=4)) is None
+
+
+def test_an_event_without_any_call_satisfies_any_max_duration() -> None:
+    """The MAX_DURATION timer never starts when no FLEX value is above 0."""
+    event = _create_dispatch_event(intervals=(_dispatch_interval(0, DISPATCH_START, timedelta(hours=6), 0),))
+
+    assert validate_flex_dispatch_event_compliant(event, max_duration=timedelta(hours=2)) is None
+
+
+def test_a_call_longer_than_max_duration_is_rejected() -> None:
+    """A single PT6H call exceeds a PT4H group."""
+    event = _create_dispatch_event(intervals=(_dispatch_interval(0, DISPATCH_START, timedelta(hours=6), 100),))
 
     errors = validate_flex_dispatch_event_compliant(event, max_duration=timedelta(hours=4))
 
@@ -1272,9 +1332,61 @@ def test_dispatch_must_not_exceed_group_max_duration() -> None:
     assert any("MAX_DURATION" in str(error["type"]) for error in errors)
 
 
-def test_adjacent_hours_do_not_count_towards_max_duration() -> None:
-    """A PT4H dispatch flanked on both sides spans six hours against a PT4H group, and is valid."""
-    assert validate_flex_dispatch_event_compliant(_create_dispatch_event(), max_duration=timedelta(hours=4)) is None
+def test_a_call_after_a_gap_still_counts_towards_max_duration() -> None:
+    """The timer keeps running through a gap: a call at 20:00 is past 17:00 plus PT2H."""
+    event = _create_dispatch_event(
+        intervals=(
+            _dispatch_interval(0, DISPATCH_START, timedelta(hours=2), 100),
+            _dispatch_interval(1, DISPATCH_START + timedelta(hours=3), timedelta(hours=1), 100),
+        )
+    )
+
+    errors = validate_flex_dispatch_event_compliant(event, max_duration=timedelta(hours=2))
+
+    assert errors is not None
+    assert any("MAX_DURATION" in str(error["type"]) for error in errors)
+
+
+def test_zero_values_after_max_duration_are_allowed() -> None:
+    """Once MAX_DURATION has passed, FLEX values of 0 are still allowed."""
+    event = _create_dispatch_event(
+        intervals=(
+            _dispatch_interval(0, DISPATCH_START, timedelta(hours=2), 100),
+            _dispatch_interval(1, DISPATCH_START + timedelta(hours=2), timedelta(hours=2), 0),
+        )
+    )
+
+    assert validate_flex_dispatch_event_compliant(event, max_duration=timedelta(hours=2)) is None
+
+
+def test_max_duration_starts_at_the_first_value_above_zero_within_an_interval() -> None:
+    """Values split their interval evenly: four values over PT4H each cover an hour."""
+    late_call = _create_dispatch_event(
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=4), (0, 0, 5, 5)),)
+    )
+    early_call = _create_dispatch_event(
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=4), (0, 5, 5, 5)),)
+    )
+
+    assert validate_flex_dispatch_event_compliant(late_call, max_duration=timedelta(hours=2)) is None
+    errors = validate_flex_dispatch_event_compliant(early_call, max_duration=timedelta(hours=2))
+    assert errors is not None
+    assert any("MAX_DURATION" in str(error["type"]) for error in errors)
+
+
+def test_max_duration_follows_time_rather_than_interval_ids() -> None:
+    """Ids do not determine chronological order: the timer starts at the earliest call, here id 1."""
+    event = _create_dispatch_event(
+        intervals=(
+            _dispatch_interval(0, DISPATCH_START + timedelta(hours=3), timedelta(hours=1), 100),
+            _dispatch_interval(1, DISPATCH_START, timedelta(hours=1), 100),
+        )
+    )
+
+    errors = validate_flex_dispatch_event_compliant(event, max_duration=timedelta(hours=2))
+
+    assert errors is not None
+    assert any("MAX_DURATION" in str(error["type"]) for error in errors)
 
 
 def test_call_must_not_exceed_offered_flexibility() -> None:
@@ -1305,65 +1417,6 @@ def test_a_flex_value_with_three_decimals_is_rejected() -> None:
 def test_a_flex_value_with_two_decimals_is_accepted() -> None:
     """Two decimals is the limit, not a rejection."""
     event = _create_dispatch_event(intervals=(_dispatch_interval(0, DISPATCH_START, timedelta(hours=2), 200.25),))
-
-    assert validate_flex_dispatch_event_compliant(event) is None
-
-
-def test_adjacent_hour_with_no_dispatch_in_the_event_is_rejected() -> None:
-    """An adjacent hour belongs to a dispatch; a lone PT1H interval abuts nothing."""
-    event = _create_dispatch_event(intervals=(_dispatch_interval(0, FIRST_ADJACENT_HOUR_START, timedelta(hours=1), 0),))
-
-    errors = validate_flex_dispatch_event_compliant(event)
-
-    assert errors is not None
-    assert any("must directly abut the dispatch" in str(error["type"]) for error in errors)
-
-
-def test_adjacent_hour_detached_from_the_only_dispatch_is_rejected() -> None:
-    """An adjacent hour four hours away from the dispatch does not abut it."""
-    detached_start = DISPATCH_START - timedelta(hours=4)
-    event = _create_dispatch_event(
-        intervals=(
-            _dispatch_interval(0, detached_start, timedelta(hours=1), 0),
-            _dispatch_interval(1, DISPATCH_START, timedelta(hours=4), 200),
-        )
-    )
-
-    errors = validate_flex_dispatch_event_compliant(event)
-
-    assert errors is not None
-    assert any("must directly abut the dispatch" in str(error["type"]) for error in errors)
-
-
-def test_only_the_innermost_of_three_stacked_adjacent_hours_abuts_the_dispatch() -> None:
-    """Abutting another adjacent hour does not count; only the interval touching the dispatch is valid."""
-    innermost_start = DISPATCH_START - timedelta(hours=1)
-    middle_start = innermost_start - timedelta(hours=1)
-    outermost_start = middle_start - timedelta(hours=1)
-    event = _create_dispatch_event(
-        intervals=(
-            _dispatch_interval(0, outermost_start, timedelta(hours=1), 0),
-            _dispatch_interval(1, middle_start, timedelta(hours=1), 0),
-            _dispatch_interval(2, innermost_start, timedelta(hours=1), 0),
-            _dispatch_interval(3, DISPATCH_START, timedelta(hours=4), 200),
-        )
-    )
-
-    errors = validate_flex_dispatch_event_compliant(event)
-
-    assert errors is not None
-    non_abutting = [error for error in errors if "must directly abut the dispatch" in str(error["type"])]
-    assert len(non_abutting) == 2
-
-
-def test_a_dispatch_flanked_by_only_one_adjacent_hour_is_valid() -> None:
-    """The BL MAY flank a dispatch with an adjacent hour on one side only."""
-    event = _create_dispatch_event(
-        intervals=(
-            _dispatch_interval(0, FIRST_ADJACENT_HOUR_START, timedelta(hours=1), 0),
-            _dispatch_interval(1, DISPATCH_START, timedelta(hours=4), 200),
-        )
-    )
 
     assert validate_flex_dispatch_event_compliant(event) is None
 

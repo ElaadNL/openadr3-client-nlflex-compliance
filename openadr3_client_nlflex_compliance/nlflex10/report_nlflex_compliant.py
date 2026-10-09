@@ -443,8 +443,8 @@ def validate_flex_delivery_report_compliant(
     Args:
         report: The report to validate.
         event_intervals: The intervals of the FLEX event being reported on, when known. Supplying
-            them adds the cross-object rules: one report interval per event interval, adjacent hours
-            included, each reusing the event interval's id and intervalPeriod.
+            them adds the cross-object rules: one report interval per event interval, each reusing the
+            event interval's id and intervalPeriod.
 
     Returns:
         The validation errors found, or None when the delivery report is compliant.
@@ -539,8 +539,8 @@ def _mirrors_event_intervals(
     """
     Validates the delivery report against the event it reports on.
 
-    One report interval per event interval, adjacent hours included, each reusing the id and the
-    intervalPeriod of the event interval it reports on.
+    One report interval per event interval, each reusing the id and the intervalPeriod of the event
+    interval it reports on.
     """
     if event_intervals is None:
         return []
@@ -551,8 +551,8 @@ def _mirrors_event_intervals(
     if reported.keys() != expected.keys():
         return [
             error(
-                "The delivery report must contain exactly one interval per interval of the FLEX event, adjacent "
-                "hours included, reusing the id of the event interval it reports on.",
+                "The delivery report must contain exactly one interval per interval of the FLEX event, reusing "
+                "the id of the event interval it reports on.",
                 "resources",
                 self.resources,
             )

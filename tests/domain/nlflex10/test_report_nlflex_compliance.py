@@ -82,7 +82,7 @@ def _acknowledgment_report() -> NewReport:
 
 
 def _delivery_report() -> NewReport:
-    """Helper function to create a compliant delivery report for one adjacent hour."""
+    """Helper function to create a compliant delivery report for one PT1H interval."""
     return _report(
         report_name=None,
         resources=(
@@ -654,7 +654,7 @@ def test_a_flex_delta_payload_carries_a_single_value() -> None:
 DELIVERED_FLEX = ReportPayloadType("DELIVERED_FLEX")
 FLEX = EventPayloadType("FLEX")
 
-ADJACENT_HOUR_START = datetime(2026, 1, 2, 16, 0, 0, tzinfo=UTC)
+PRE_DISPATCH_START = datetime(2026, 1, 2, 16, 0, 0, tzinfo=UTC)
 DISPATCH_START = datetime(2026, 1, 2, 17, 0, 0, tzinfo=UTC)
 
 
@@ -699,7 +699,7 @@ def _delivery_resources(intervals: tuple[Interval, ...] = _UNSET) -> tuple[Repor
             resource_name="AGGREGATED_REPORT",
             intervals=(
                 (
-                    _delivery_interval(0, ADJACENT_HOUR_START, timedelta(hours=1), 0),
+                    _delivery_interval(0, PRE_DISPATCH_START, timedelta(hours=1), 0),
                     _delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),
                 )
                 if intervals is _UNSET
@@ -723,7 +723,7 @@ def _event_intervals() -> tuple[Interval[EventPayload], ...]:
     return (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(EventPayload(type=FLEX, values=(0,)),),
         ),
         Interval(
@@ -832,7 +832,7 @@ def test_delivery_report_value_count_follows_interval_duration() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0)),),
         ),
     )
@@ -850,7 +850,7 @@ def test_delivery_report_values_are_not_negative() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0, -5, 0)),),
         ),
     )
@@ -880,7 +880,7 @@ def test_delivery_report_payload_type_must_be_delivered_flex() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=ACK, values=(True,)),),
         ),
     )
@@ -894,7 +894,7 @@ def test_delivery_report_payload_type_must_be_delivered_flex() -> None:
 
 
 def test_delivery_report_mirrors_every_event_interval() -> None:
-    """One report interval per event interval, adjacent hours included."""
+    """One report interval per event interval."""
     intervals = (_delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),)
 
     errors = validate_flex_delivery_report_compliant(
@@ -909,7 +909,7 @@ def test_delivery_report_mirrors_every_event_interval() -> None:
 def test_delivery_report_reuses_event_interval_periods() -> None:
     """Each report interval repeats the intervalPeriod of the event interval it reports on."""
     intervals = (
-        _delivery_interval(0, ADJACENT_HOUR_START, timedelta(hours=1), 0),
+        _delivery_interval(0, PRE_DISPATCH_START, timedelta(hours=1), 0),
         _delivery_interval(1, DISPATCH_START + timedelta(hours=1), timedelta(hours=4), 200),
     )
 
@@ -934,7 +934,7 @@ def test_a_delivered_value_with_three_decimals_is_rejected() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0, 0, 0.125)),),
         ),
     )
@@ -952,7 +952,7 @@ def test_a_delivered_value_with_two_decimals_is_accepted() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0, 0, 0.25)),),
         ),
     )
