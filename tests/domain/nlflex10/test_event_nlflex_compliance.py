@@ -22,6 +22,7 @@ from openadr3_client.oadr310.models.report.report_payload import (
 from openadr3_client.oadr310.models.unit import Unit
 
 from openadr3_client_nlflex_compliance.nlflex10.event_nlflex_compliant import (
+    FLEX_VALUE_DURATION,
     EventKind,
     event_kind,
     validate_baseline_event_compliant,
@@ -137,7 +138,7 @@ def _dispatch_event() -> NewEvent:
                 interval_period=IntervalPeriod(
                     start=datetime(2026, 1, 2, 17, 0, 0, tzinfo=UTC), duration=timedelta(hours=4)
                 ),
-                payloads=(EventPayload(type=EventPayloadType("FLEX"), values=(200,)),),
+                payloads=(EventPayload(type=EventPayloadType("FLEX"), values=(200,) * 16),),
             ),
         ),
     )
@@ -1010,11 +1011,11 @@ def _default_valid_dispatch_report_descriptors() -> tuple[ReportDescriptor, ...]
 def _dispatch_interval(
     interval_id: int, start: datetime, duration: timedelta, flex_value: float
 ) -> Interval[EventPayload]:
-    """Helper function to create a single event interval."""
+    """Helper function to create a single event interval, carrying flex_value for every PT15M of it."""
     return Interval(
         id=interval_id,
         interval_period=IntervalPeriod(start=start, duration=duration),
-        payloads=(EventPayload(type=FLEX, values=(flex_value,)),),
+        payloads=(EventPayload(type=FLEX, values=(flex_value,) * (duration // FLEX_VALUE_DURATION)),),
     )
 
 
@@ -1240,9 +1241,9 @@ def _flex_values_interval(start: datetime, duration: timedelta, values: tuple[An
 
 
 def test_a_flex_payload_with_multiple_values_is_valid() -> None:
-    """The FLEX payload carries a list of values; the profile does not prescribe how many."""
+    """The FLEX payload carries a list of values, one per PT15M of its interval."""
     event = _create_dispatch_event(
-        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, 200, 150.25)),)
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(minutes=45), (100, 200, 150.25)),)
     )
 
     assert validate_flex_dispatch_event_compliant(event) is None
@@ -1269,7 +1270,7 @@ def test_a_flex_payload_without_values_is_rejected() -> None:
 def test_every_flex_value_is_checked_for_decimals() -> None:
     """A single value with three decimals among valid ones rejects the payload."""
     event = _create_dispatch_event(
-        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, 200.125)),)
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(minutes=30), (100, 200.125)),)
     )
 
     errors = validate_flex_dispatch_event_compliant(event)
@@ -1280,7 +1281,9 @@ def test_every_flex_value_is_checked_for_decimals() -> None:
 
 def test_every_flex_value_is_checked_for_type() -> None:
     """A boolean among valid values rejects the payload."""
-    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, True)),))
+    event = _create_dispatch_event(
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(minutes=30), (100, True)),)
+    )
 
     errors = validate_flex_dispatch_event_compliant(event)
 
@@ -1290,7 +1293,9 @@ def test_every_flex_value_is_checked_for_type() -> None:
 
 def test_every_flex_value_is_checked_for_sign() -> None:
     """A negative value among valid ones rejects the payload."""
-    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100, -10)),))
+    event = _create_dispatch_event(
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(minutes=30), (100, -10)),)
+    )
 
     errors = validate_flex_dispatch_event_compliant(event)
 
@@ -1300,7 +1305,7 @@ def test_every_flex_value_is_checked_for_sign() -> None:
 
 def test_every_flex_value_is_bounded_by_offered_flexibility() -> None:
     """A single value above the group's ACTIVE_AVAILABLE_FLEX rejects the call."""
-    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (10, 20)),))
+    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(minutes=30), (10, 20)),))
 
     errors = validate_flex_dispatch_event_compliant(event, max_callable_kw=12.5)
 
@@ -1308,8 +1313,8 @@ def test_every_flex_value_is_bounded_by_offered_flexibility() -> None:
     assert any("ACTIVE_AVAILABLE_FLEX" in str(error["type"]) for error in errors)
 
 
-def test_an_interval_may_have_any_duration() -> None:
-    """The profile no longer prescribes interval durations."""
+def test_intervals_may_have_different_durations() -> None:
+    """Any duration is allowed as long as the FLEX payload carries one value per PT15M of it."""
     event = _create_dispatch_event(
         intervals=(
             _dispatch_interval(0, DISPATCH_START, timedelta(hours=3), 100),
@@ -1318,6 +1323,32 @@ def test_an_interval_may_have_any_duration() -> None:
     )
 
     assert validate_flex_dispatch_event_compliant(event) is None
+
+
+def test_a_pt2h_interval_with_eight_values_is_valid() -> None:
+    """PT2H divided by eight values is PT15M per value."""
+    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=2), (100,) * 8),))
+
+    assert validate_flex_dispatch_event_compliant(event) is None
+
+
+@pytest.mark.parametrize(
+    ("duration", "value_count"),
+    [
+        (timedelta(hours=2), 7),
+        (timedelta(hours=2), 9),
+        (timedelta(hours=2), 1),
+        (timedelta(minutes=10), 1),
+    ],
+)
+def test_a_flex_payload_without_one_value_per_pt15m_is_rejected(duration: timedelta, value_count: int) -> None:
+    """The interval's duration divided by the number of values must be PT15M."""
+    event = _create_dispatch_event(intervals=(_flex_values_interval(DISPATCH_START, duration, (100,) * value_count),))
+
+    errors = validate_flex_dispatch_event_compliant(event)
+
+    assert errors is not None
+    assert any("one value per PT15M" in str(error["type"]) for error in errors)
 
 
 def test_flex_values_of_zero_do_not_count_towards_max_duration() -> None:
@@ -1370,16 +1401,16 @@ def test_zero_values_after_max_duration_are_allowed() -> None:
 
 
 def test_max_duration_starts_at_the_first_value_above_zero_within_an_interval() -> None:
-    """Values split their interval evenly: four values over PT4H each cover an hour."""
+    """Values split their interval evenly: four values over PT1H each cover PT15M."""
     late_call = _create_dispatch_event(
-        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=4), (0, 0, 5, 5)),)
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=1), (0, 0, 5, 5)),)
     )
     early_call = _create_dispatch_event(
-        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=4), (0, 5, 5, 5)),)
+        intervals=(_flex_values_interval(DISPATCH_START, timedelta(hours=1), (0, 5, 5, 5)),)
     )
 
-    assert validate_flex_dispatch_event_compliant(late_call, max_duration=timedelta(hours=2)) is None
-    errors = validate_flex_dispatch_event_compliant(early_call, max_duration=timedelta(hours=2))
+    assert validate_flex_dispatch_event_compliant(late_call, max_duration=timedelta(minutes=30)) is None
+    errors = validate_flex_dispatch_event_compliant(early_call, max_duration=timedelta(minutes=30))
     assert errors is not None
     assert any("MAX_DURATION" in str(error["type"]) for error in errors)
 
@@ -1437,7 +1468,7 @@ def test_a_boolean_flex_value_is_rejected() -> None:
         intervals=(
             Interval(
                 id=0,
-                interval_period=IntervalPeriod(start=DISPATCH_START, duration=timedelta(hours=2)),
+                interval_period=IntervalPeriod(start=DISPATCH_START, duration=timedelta(minutes=15)),
                 payloads=(EventPayload(type=FLEX, values=(True,)),),
             ),
         )

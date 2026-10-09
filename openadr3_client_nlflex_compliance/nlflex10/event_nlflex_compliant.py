@@ -719,6 +719,9 @@ DELIVERED_FLEX_PAYLOAD_TYPE = ReportPayloadType("DELIVERED_FLEX")
 # PT25H, so that days with a daylight saving time transition can be covered as well.
 EVENT_WINDOW_DURATIONS = frozenset({timedelta(hours=23), timedelta(hours=24), timedelta(hours=25)})
 
+# Every FLEX value covers PT15M of its interval: an interval of duration D carries D / PT15M values.
+FLEX_VALUE_DURATION = timedelta(minutes=15)
+
 # The ACK descriptor acknowledges on retrieval; the DELIVERED_FLEX descriptor asks for a single
 # report covering every interval, once they have all transpired ([OADR3-UG] section 7.5).
 ACK_DESCRIPTOR_FREQUENCY = 0
@@ -867,10 +870,9 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
     Validates the intervals of the dispatch.
 
     Ids MUST be unique integers assigned in ascending order starting at 0, every interval MUST define
-    its own intervalPeriod of any duration, intervals MUST NOT overlap, and every interval MUST fall
-    within the event's own window. Payloads MUST carry exactly one FLEX entry with a
-    non-empty list of values, every value a double in KW with at most two decimals, of zero or
-    larger.
+    its own intervalPeriod, intervals MUST NOT overlap, and every interval MUST fall within the
+    event's own window. Payloads MUST carry exactly one FLEX entry with one value per PT15M of the
+    interval's duration, every value a double in KW with at most two decimals, of zero or larger.
     """
     validation_errors: list[InitErrorDetails] = []
     intervals = self.intervals or ()
@@ -940,6 +942,17 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
                 error("The FLEX payload must carry at least one value.", "intervals", self.intervals)
             )
             continue
+
+        # Compared by multiplication rather than division: timedelta / int rounds to the microsecond.
+        if duration != len(values) * FLEX_VALUE_DURATION:
+            validation_errors.append(
+                error(
+                    "The FLEX payload must carry one value per PT15M of its interval's duration, e.g. an interval "
+                    "of PT2H carries 8 values.",
+                    "intervals",
+                    self.intervals,
+                )
+            )
 
         parsed_values = [as_power_value(value) for value in values]
         flex_values = [flex_value for flex_value in parsed_values if flex_value is not None]
@@ -1072,8 +1085,8 @@ def _active_periods(self: Event) -> list[tuple[datetime, datetime]]:
     Collects the periods during which a FLEX value above 0 is called, one per value.
 
     An interval's values split its intervalPeriod evenly: with N values, value i covers the i-th
-    N-th of the interval. Values that are not a valid power value are reported by
-    _dispatch_intervals_compliant and skipped here.
+    N-th of the interval, which is PT15M in a compliant dispatch. Values that are not a valid power
+    value are reported by _dispatch_intervals_compliant and skipped here.
     """
     periods: list[tuple[datetime, datetime]] = []
 
