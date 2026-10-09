@@ -165,7 +165,7 @@ def test_every_allowed_max_duration_is_accepted(max_duration: str) -> None:
 
 
 def test_an_unsupported_max_duration_is_rejected() -> None:
-    """PT1H is the length of an adjacent hour, not an availability duration."""
+    """PT1H is not one of the availability durations the profile allows."""
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(_replacing("MAX_DURATION", ("PT1H",))))
 
     assert errors is not None

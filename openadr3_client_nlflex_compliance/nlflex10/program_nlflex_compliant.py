@@ -37,6 +37,9 @@ PROGRAM_TYPE_ATTRIBUTE = ProgramAttributeType.PROGRAM_TYPE
 RETAILER_NAME_ATTRIBUTE = ProgramAttributeType.RETAILER_NAME
 BINDING_EVENTS_ATTRIBUTE = ProgramAttributeType.BINDING_EVENTS
 
+# A program issued through GOPACS rather than by a single DSO carries this RETAILER_NAME.
+GOPACS_RETAILER_NAME = "GOPACS"
+
 
 def _program_type_attribute_compliant(self: Program) -> list[InitErrorDetails]:
     """Validates that the program declares the version of this specification it implements."""
@@ -63,7 +66,7 @@ def _program_type_attribute_compliant(self: Program) -> list[InitErrorDetails]:
 
 
 def _retailer_name_attribute_compliant(self: Program) -> list[InitErrorDetails]:
-    """Validates that the program names the DSO issuing it, by its EAN13."""
+    """Validates that the program names the DSO issuing it by its EAN13, or names GOPACS."""
     retailer_name = self.attributes.get_by_type(RETAILER_NAME_ATTRIBUTE) if self.attributes else None
 
     if retailer_name is None:
@@ -71,11 +74,14 @@ def _retailer_name_attribute_compliant(self: Program) -> list[InitErrorDetails]:
             error("The program must have a RETAILER_NAME attribute.", "attributes", self.attributes),
         ]
 
-    if not retailer_name.values or not all(is_dso_identifier(value) for value in retailer_name.values):
+    if not retailer_name.values or not all(
+        value == GOPACS_RETAILER_NAME or is_dso_identifier(value) for value in retailer_name.values
+    ):
         return [
             error(
-                "The RETAILER_NAME attribute must be the identifier of the issuing DSO. The profile fixes these: the "
-                "value must be one of the six EAN13 codes in the DSO identifiers table.",
+                "The RETAILER_NAME attribute must be the identifier of the issuing DSO, or GOPACS. The profile "
+                "fixes the DSO identifiers: the value must be one of the six EAN13 codes in the DSO identifiers "
+                'table, or "GOPACS".',
                 "attributes",
                 self.attributes,
             )

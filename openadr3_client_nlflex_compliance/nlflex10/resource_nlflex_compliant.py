@@ -7,7 +7,8 @@ Compliance validator for the resource of the OpenADR DER profile specification v
 
 A resource represents a single registered DER asset of a Service Provider. Its resourceName is the
 Asset-ID, and it MUST NOT be registered to more than one resource group. That last rule is about the
-resource groups rather than the resource, so it cannot be checked from the resource alone.
+resource groups rather than the resource, so it cannot be checked from the resource alone. The
+targets of a resource are not constrained by this profile and are not validated.
 
 All attribute types below are defined by this profile and are not part of the OpenADR 3.1 attribute
 type enumeration.
@@ -31,25 +32,6 @@ EAN_ATTRIBUTE = VenResourceAttributeType("EAN")
 FLEX_TYPE_ATTRIBUTE = VenResourceAttributeType("FLEX_TYPE")
 REGISTRATION_STATUS_ATTRIBUTE = VenResourceAttributeType("REGISTRATION_STATUS")
 REJECTED_REASON_ATTRIBUTE = VenResourceAttributeType("REJECTED_REASON")
-
-
-def _targets_compliant(self: Resource) -> list[InitErrorDetails]:
-    """
-    Validates that the resource targets its own Asset-ID, when targets are present.
-
-    The targets MUST contain the Asset-ID, which serves as the node handle through which the asset
-    is targeted and referenced as a resource group child. Targets can only be assigned by a BL
-    client; a resource submitted by a VEN client does not carry a targets field at all, so there is
-    nothing to validate until the BL populates it.
-    """
-    targets = getattr(self, "targets", None)
-    if targets is None:
-        return []
-
-    if self.resource_name not in targets:
-        return [error("The resource targets must include its own Asset-ID.", "targets", targets)]
-
-    return []
 
 
 def _dso_id_attribute_compliant(self: Resource) -> list[InitErrorDetails]:
@@ -197,7 +179,6 @@ def validate_resource_nlflex_compliant(resource: Resource) -> list[InitErrorDeta
     """
     validation_errors: list[InitErrorDetails] = []
 
-    validation_errors.extend(_targets_compliant(resource))
     validation_errors.extend(_dso_id_attribute_compliant(resource))
     validation_errors.extend(_ean_attribute_compliant(resource))
     validation_errors.extend(_flex_type_attribute_compliant(resource))
