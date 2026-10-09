@@ -5,6 +5,7 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
 from openadr3_client._models.common.interval import Interval
 from openadr3_client._models.common.interval_period import IntervalPeriod
 from openadr3_client.oadr310.models.event.event import NewEvent
@@ -129,7 +130,7 @@ def _dispatch_event() -> NewEvent:
                 repeat=1,
             ),
         ),
-        interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(days=1)),
+        interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(hours=24)),
         intervals=(
             Interval(
                 id=0,
@@ -218,7 +219,7 @@ def test_a_dispatch_event_is_validated_against_dispatch_rules() -> None:
         targets=("GROUP-0001", "GROUP-0002"),
         payload_descriptors=(EventPayloadDescriptor(payload_type=EventPayloadType("FLEX"), units=Unit.KW),),
         report_descriptors=_dispatch_event().report_descriptors,
-        interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(days=1)),
+        interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(hours=24)),
         intervals=_dispatch_event().intervals,
     )
 
@@ -1044,7 +1045,7 @@ def _create_dispatch_event(
         event_name="Flex dispatch - GROUP-0001",
         targets=("GROUP-0001",) if targets is _UNSET else targets,
         interval_period=(
-            IntervalPeriod(start=WINDOW_START, duration=timedelta(days=1))
+            IntervalPeriod(start=WINDOW_START, duration=timedelta(hours=24))
             if interval_period is _UNSET
             else interval_period
         ),
@@ -1146,14 +1147,23 @@ def test_event_level_interval_period_required() -> None:
     assert any("intervalPeriod at the event level" in str(error["type"]) for error in errors)
 
 
-def test_event_window_is_one_day() -> None:
-    """The event-level window is P1D: the day after the publication deadline."""
-    event = _create_dispatch_event(interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(hours=12)))
+@pytest.mark.parametrize("hours", [23, 24, 25])
+def test_event_window_may_be_23_24_or_25_hours(hours: int) -> None:
+    """The event-level window is PT23H, PT24H or PT25H, to cover days with a DST transition."""
+    event = _create_dispatch_event(interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(hours=hours)))
+
+    assert validate_flex_dispatch_event_compliant(event) is None
+
+
+@pytest.mark.parametrize("hours", [12, 22, 26])
+def test_event_window_of_another_duration_is_rejected(hours: int) -> None:
+    """Any event-level window other than PT23H, PT24H or PT25H is rejected."""
+    event = _create_dispatch_event(interval_period=IntervalPeriod(start=WINDOW_START, duration=timedelta(hours=hours)))
 
     errors = validate_flex_dispatch_event_compliant(event)
 
     assert errors is not None
-    assert any("duration of P1D" in str(error["type"]) for error in errors)
+    assert any("duration of PT23H, PT24H or PT25H" in str(error["type"]) for error in errors)
 
 
 def test_intervals_must_fall_within_the_window() -> None:

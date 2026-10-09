@@ -715,8 +715,9 @@ FLEX_PAYLOAD_TYPE = EventPayloadType("FLEX")
 ACK_PAYLOAD_TYPE = ReportPayloadType("ACK")
 DELIVERED_FLEX_PAYLOAD_TYPE = ReportPayloadType("DELIVERED_FLEX")
 
-# The event-level intervalPeriod covers the 24 hours from the publication deadline plus 24h.
-EVENT_WINDOW_DURATION = timedelta(days=1)
+# The event-level intervalPeriod covers one day from the publication deadline plus 24h: PT23H, PT24H or
+# PT25H, so that days with a daylight saving time transition can be covered as well.
+EVENT_WINDOW_DURATIONS = frozenset({timedelta(hours=23), timedelta(hours=24), timedelta(hours=25)})
 
 # The ACK descriptor acknowledges on retrieval; the DELIVERED_FLEX descriptor asks for a single
 # report covering every interval, once they have all transpired ([OADR3-UG] section 7.5).
@@ -837,8 +838,8 @@ def _dispatch_interval_period_compliant(self: Event) -> list[InitErrorDetails]:
     Validates the event-level intervalPeriod.
 
     A FLEX event MUST define a single intervalPeriod at the event level, with a start equal to the
-    publication deadline plus 24h and a duration of P1D. The deadline itself cannot be checked from
-    the object; the duration can.
+    publication deadline plus 24h and a duration of PT23H, PT24H or PT25H. The deadline itself cannot
+    be checked from the object; the duration can.
     """
     if self.interval_period is None:
         return [
@@ -849,10 +850,10 @@ def _dispatch_interval_period_compliant(self: Event) -> list[InitErrorDetails]:
             )
         ]
 
-    if self.interval_period.duration != EVENT_WINDOW_DURATION:
+    if self.interval_period.duration not in EVENT_WINDOW_DURATIONS:
         return [
             error(
-                "The flexibility dispatch event-level intervalPeriod must have a duration of P1D.",
+                "The flexibility dispatch event-level intervalPeriod must have a duration of PT23H, PT24H or PT25H.",
                 "interval_period",
                 self.interval_period,
             )
