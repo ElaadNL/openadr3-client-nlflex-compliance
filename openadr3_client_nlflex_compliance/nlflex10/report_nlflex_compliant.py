@@ -13,10 +13,10 @@ The profile defines five report shapes that all use the same underlying OpenADR3
 - The flex delivery report, stating what the group delivered against that FLEX event.
 - The operational status report, stating whether a resource can deliver flexibility.
 
-Two of them carry a fixed reportName and three do not, so this module reads the reportName first and
-falls back to the payload types the report carries. A report that matches no shape is reported as
-such. That matters: the v0.1 draft's dispatcher routed every report whose reportName it did not
-recognise into the flex delta branch, so an acknowledgment or a delivery report failed on a rule it
+The reportName is optional and identifies none of them, so this module tells the shapes apart by the
+payload types the report carries. A report that matches no shape is reported as such. That matters:
+the v0.1 draft's dispatcher routed every report whose reportName it did not recognise into the flex
+delta branch, so an acknowledgment or a delivery report failed on a rule it
 was never subject to, which reads as a real non-conformance.
 
 The clientName rule holds for every shape, so it is checked here rather than five times over.
@@ -95,28 +95,13 @@ def single_aggregated_report_resource(
 # its eventID. That the referenced event is in fact the anchor event cannot be checked from the report.
 # --------------------------------------------------------------------------------------------------------------
 
-REGISTRATION_REPORT_NAME = "RESOURCE_REGISTRATION"
-
 RESOURCE_GROUP_ID_PAYLOAD_TYPE = ReportPayloadType("RESOURCE_GROUP_ID")
 
 REQUEST_PAYLOAD_TYPES = (REGISTRATION_REQUEST_PAYLOAD_TYPE, DE_REGISTRATION_REQUEST_PAYLOAD_TYPE)
+REGISTRATION_REPORT_PAYLOAD_TYPES = frozenset({RESOURCE_GROUP_ID_PAYLOAD_TYPE, *REQUEST_PAYLOAD_TYPES})
 
 # One RESOURCE_GROUP_ID, and one REGISTRATION_REQUEST or DE_REGISTRATION_REQUEST.
 REGISTRATION_REPORT_INTERVAL_PAYLOAD_COUNT = 2
-
-
-def _registration_report_name_compliant(self: Report) -> list[InitErrorDetails]:
-    """Validates the reportName, which both operations share."""
-    if self.report_name != REGISTRATION_REPORT_NAME:
-        return [
-            error(
-                "The registration report must have a reportName of 'RESOURCE_REGISTRATION'.",
-                "report_name",
-                self.report_name,
-            )
-        ]
-
-    return []
 
 
 def validate_registration_report_compliant(report: Report) -> list[InitErrorDetails] | None:
@@ -130,7 +115,7 @@ def validate_registration_report_compliant(report: Report) -> list[InitErrorDeta
         The validation errors found, or None when the report is compliant.
 
     """
-    validation_errors = _registration_report_name_compliant(report)
+    validation_errors: list[InitErrorDetails] = []
 
     resource_errors, resource = single_aggregated_report_resource(
         report,
@@ -239,7 +224,7 @@ def _request_payload_compliant(self: Report, payload: object) -> list[InitErrorD
 # Both are at most zero. Zero means no flexibility is offered, so the dispatch limit equals the
 # ACTIVE_BASELINE; the more negative the value, the more the group offers.
 #
-# The report has no fixed reportName. Two rules of the chapter are about sequence rather than shape
+# Two rules of the chapter are about sequence rather than shape
 # and cannot be checked from a single object: the report references the baseline event that requested
 # it, and the most recent report for a group is the group's offer.
 # --------------------------------------------------------------------------------------------------------------
@@ -340,12 +325,12 @@ def validate_flex_delta_report_compliant(report: Report) -> list[InitErrorDetail
 # demands exactly one FLEX_DELTA payload per interval. That produces errors naming a rule the report
 # was never subject to.
 #
-# Neither report has a fixed reportName, so the two validators are exported separately rather than
-# behind a dispatcher: the caller knows which report it asked for. One rule is not checkable from the
-# report alone — a delivery report MUST carry one interval per interval of the `FLEX` event it
-# references, reusing that interval's id and intervalPeriod. The value count per interval follows from
-# the interval's own duration and is checked here; matching against the event needs the event, so
-# `validate_flex_delivery_report_compliant` accepts the event's intervals optionally.
+# Both validators are also exported separately, for a caller that knows which report it asked for.
+# One rule is not checkable from the report alone — a delivery report MUST carry one interval per
+# interval of the `FLEX` event it references, reusing that interval's id and intervalPeriod. The value
+# count per interval follows from the interval's own duration and is checked here; matching against the
+# event needs the event, so `validate_flex_delivery_report_compliant` accepts the event's intervals
+# optionally.
 # --------------------------------------------------------------------------------------------------------------
 
 ACK_PAYLOAD_TYPE = ReportPayloadType("ACK")
@@ -588,25 +573,9 @@ def _mirrors_event_intervals(
 # unchanged.
 # --------------------------------------------------------------------------------------------------------------
 
-OPERATIONAL_STATUS_REPORT_NAME = "OPERATIONAL_STATUS"
-
 # See the "Operational status values" table. NORMAL and ERROR are taken from the OpenADR 3.1
 # operating state enumeration; PENDING is defined by this profile.
 KNOWN_OPERATIONAL_STATUS_VALUES = frozenset({"NORMAL", "ERROR", "PENDING"})
-
-
-def _operational_status_report_name_compliant(self: Report) -> list[InitErrorDetails]:
-    """Validates the reportName the operational status report is discriminated by."""
-    if self.report_name != OPERATIONAL_STATUS_REPORT_NAME:
-        return [
-            error(
-                "The operational status report must have a reportName of 'OPERATIONAL_STATUS'.",
-                "report_name",
-                self.report_name,
-            )
-        ]
-
-    return []
 
 
 def _operational_status_resource_compliant(self: Report, resource: ReportResource) -> list[InitErrorDetails]:
@@ -677,7 +646,7 @@ def validate_operational_status_report_compliant(report: Report) -> list[InitErr
         The validation errors found, or None when the report is compliant.
 
     """
-    validation_errors = _operational_status_report_name_compliant(report)
+    validation_errors: list[InitErrorDetails] = []
 
     if not report.resources:
         validation_errors.append(
@@ -696,8 +665,8 @@ def validate_operational_status_report_compliant(report: Report) -> list[InitErr
 
 
 # --------------------------------------------------------------------------------------------------------------
-# Discriminator: routes a Report to the shape-specific validator above, based on its reportName and the
-# payload types it carries.
+# Discriminator: routes a Report to the shape-specific validator above, based on the payload types it
+# carries.
 # --------------------------------------------------------------------------------------------------------------
 
 
@@ -734,8 +703,9 @@ def report_kind(report: Report) -> ReportKind | None:
     """
     Determines which report shape this is.
 
-    The registration report and the operational status report are identified by their reportName.
-    The other three have no fixed reportName and are identified by the payload types they carry.
+    Every shape is identified by the payload types it carries; the reportName is optional and plays
+    no part. Each shape has payload types of its own, so the order of the checks only matters for a
+    report that mixes them, which the selected validator then rejects for its unexpected payloads.
 
     Args:
         report: The report to classify.
@@ -744,13 +714,13 @@ def report_kind(report: Report) -> ReportKind | None:
         The report shape, or None when the report matches no shape the profile defines.
 
     """
-    if report.report_name == REGISTRATION_REPORT_NAME:
+    payload_types = _carried_payload_types(report)
+
+    if payload_types & REGISTRATION_REPORT_PAYLOAD_TYPES:
         return ReportKind.RESOURCE_REGISTRATION
 
-    if report.report_name == OPERATIONAL_STATUS_REPORT_NAME:
+    if OPERATIONAL_STATUS_PAYLOAD_TYPE in payload_types:
         return ReportKind.OPERATIONAL_STATUS
-
-    payload_types = _carried_payload_types(report)
 
     if ACK_PAYLOAD_TYPE in payload_types:
         return ReportKind.FLEX_ACKNOWLEDGMENT
@@ -788,8 +758,8 @@ def validate_report_nlflex_compliant(report: Report) -> list[InitErrorDetails] |
     """
     Validates that a report is compliant with the OpenADR DER profile specification v1.0.0.
 
-    Dispatches to the applicable object constraints and requirements based on the report's
-    reportName and the payload types it carries.
+    Dispatches to the applicable object constraints and requirements based on the payload types the
+    report carries.
 
     Args:
         report: The report to validate.
@@ -815,8 +785,9 @@ def validate_report_nlflex_compliant(report: Report) -> list[InitErrorDetails] |
         shape_errors = [
             error(
                 "The report does not match any report shape defined by the profile. A report is identified by "
-                "its reportName, 'RESOURCE_REGISTRATION' or 'OPERATIONAL_STATUS', or by the payload types it "
-                "carries: 'ACK' for a dispatch acknowledgment, 'DELIVERED_FLEX' for a delivery report, and "
+                "the payload types it carries: 'RESOURCE_GROUP_ID', 'REGISTRATION_REQUEST' or "
+                "'DE_REGISTRATION_REQUEST' for a registration report, 'OPERATIONAL_STATUS' for an operational "
+                "status report, 'ACK' for a dispatch acknowledgment, 'DELIVERED_FLEX' for a delivery report, and "
                 "'ACTIVE_FLEX_DELTA' or 'RESERVED_FLEX_DELTA' for a flex delta report.",
                 "resources",
                 report.resources,

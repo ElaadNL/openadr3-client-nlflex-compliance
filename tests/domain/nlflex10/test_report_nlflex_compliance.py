@@ -122,27 +122,27 @@ def _operational_status_report() -> NewReport:
 
 
 def test_the_registration_report_is_recognised() -> None:
-    """Discriminated by its reportName."""
+    """Discriminated by payload type."""
     assert report_kind(_registration_report()) is ReportKind.RESOURCE_REGISTRATION
 
 
 def test_the_operational_status_report_is_recognised() -> None:
-    """Discriminated by its reportName."""
+    """Discriminated by payload type."""
     assert report_kind(_operational_status_report()) is ReportKind.OPERATIONAL_STATUS
 
 
 def test_the_flex_delta_report_is_recognised() -> None:
-    """No fixed reportName, so discriminated by payload type."""
+    """Discriminated by payload type."""
     assert report_kind(_flex_delta_report()) is ReportKind.FLEX_DELTA
 
 
 def test_the_acknowledgment_report_is_recognised() -> None:
-    """No fixed reportName, so discriminated by payload type."""
+    """Discriminated by payload type."""
     assert report_kind(_acknowledgment_report()) is ReportKind.FLEX_ACKNOWLEDGMENT
 
 
 def test_the_delivery_report_is_recognised() -> None:
-    """No fixed reportName, so discriminated by payload type."""
+    """Discriminated by payload type."""
     assert report_kind(_delivery_report()) is ReportKind.FLEX_DELIVERY
 
 
@@ -348,12 +348,13 @@ def test_deregistration_report_valid() -> None:
     assert validate_registration_report_compliant(_create_registration_report(payloads=payloads)) is None
 
 
-def test_report_name_must_be_resource_registration() -> None:
-    """Both operations use the RESOURCE_REGISTRATION report name."""
-    errors = validate_registration_report_compliant(_create_registration_report(report_name="REGISTRATION"))
+def test_registration_report_name_is_optional() -> None:
+    """The reportName is optional: any value, or none at all, is accepted and plays no part in routing."""
+    for report_name in (None, "REGISTRATION"):
+        report = _create_registration_report(report_name=report_name)
 
-    assert errors is not None
-    assert any("'RESOURCE_REGISTRATION'" in str(error["type"]) for error in errors)
+        assert report_kind(report) is ReportKind.RESOURCE_REGISTRATION
+        assert validate_report_nlflex_compliant(report) is None
 
 
 def test_registration_a_per_asset_resource_entry_is_rejected() -> None:
@@ -1021,12 +1022,13 @@ def test_one_entry_per_resource_being_reported_on() -> None:
     assert validate_operational_status_report_compliant(report) is None
 
 
-def test_report_name_must_be_operational_status() -> None:
-    """The report is discriminated by its reportName."""
-    errors = validate_operational_status_report_compliant(_create_operational_status_report(report_name="STATUS"))
+def test_operational_status_report_name_is_optional() -> None:
+    """The reportName is optional: any value, or none at all, is accepted and plays no part in routing."""
+    for report_name in (None, "STATUS"):
+        report = _create_operational_status_report(report_name=report_name)
 
-    assert errors is not None
-    assert any("'OPERATIONAL_STATUS'" in str(error["type"]) for error in errors)
+        assert report_kind(report) is ReportKind.OPERATIONAL_STATUS
+        assert validate_report_nlflex_compliant(report) is None
 
 
 def test_operational_status_exactly_one_interval_with_id_zero() -> None:
