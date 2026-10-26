@@ -704,8 +704,8 @@ def validate_flex_delta_override_event_compliant(event: Event) -> list[InitError
 #
 # - The called amount MUST NOT exceed the group's computed ACTIVE_AVAILABLE_FLEX. That value lives on
 #   the resource group, not on the event.
-# - A dispatch interval's duration MUST NOT exceed the targeted resource group's MAX_DURATION. Same
-#   reason.
+# - Once a FLEX value above 0 is called, no FLEX value may be above 0 after the targeted resource
+#   group's MAX_DURATION has passed. Same reason.
 #
 # Both are checked by a caller that holds the resource group; `validate_flex_dispatch_event_compliant`
 # accepts optional bounds for exactly that purpose.
@@ -715,16 +715,12 @@ FLEX_PAYLOAD_TYPE = EventPayloadType("FLEX")
 ACK_PAYLOAD_TYPE = ReportPayloadType("ACK")
 DELIVERED_FLEX_PAYLOAD_TYPE = ReportPayloadType("DELIVERED_FLEX")
 
-# The event-level intervalPeriod covers the 24 hours from the publication deadline plus 24h.
-EVENT_WINDOW_DURATION = timedelta(days=1)
+# The event-level intervalPeriod covers one day from the publication deadline plus 24h: PT23H, PT24H or
+# PT25H, so that days with a daylight saving time transition can be covered as well.
+EVENT_WINDOW_DURATIONS = frozenset({timedelta(hours=23), timedelta(hours=24), timedelta(hours=25)})
 
-# An adjacent hour holds the group at its ACTIVE_BASELINE either side of a dispatch. It is not a
-# dispatch and does not count towards the resource group's MAX_DURATION.
-ADJACENT_HOUR_DURATION = timedelta(hours=1)
-ADJACENT_HOUR_FLEX_VALUE = 0
-
-# A dispatch MUST have a duration equal to one of these.
-DISPATCH_DURATIONS = (timedelta(hours=2), timedelta(hours=4), timedelta(hours=6))
+# Every FLEX value covers PT15M of its interval: an interval of duration D carries D / PT15M values.
+FLEX_VALUE_DURATION = timedelta(minutes=15)
 
 # The ACK descriptor acknowledges on retrieval; the DELIVERED_FLEX descriptor asks for a single
 # report covering every interval, once they have all transpired ([OADR3-UG] section 7.5).
@@ -845,8 +841,8 @@ def _dispatch_interval_period_compliant(self: Event) -> list[InitErrorDetails]:
     Validates the event-level intervalPeriod.
 
     A FLEX event MUST define a single intervalPeriod at the event level, with a start equal to the
-    publication deadline plus 24h and a duration of P1D. The deadline itself cannot be checked from
-    the object; the duration can.
+    publication deadline plus 24h and a duration of PT23H, PT24H or PT25H. The deadline itself cannot
+    be checked from the object; the duration can.
     """
     if self.interval_period is None:
         return [
@@ -857,10 +853,10 @@ def _dispatch_interval_period_compliant(self: Event) -> list[InitErrorDetails]:
             )
         ]
 
-    if self.interval_period.duration != EVENT_WINDOW_DURATION:
+    if self.interval_period.duration not in EVENT_WINDOW_DURATIONS:
         return [
             error(
-                "The flexibility dispatch event-level intervalPeriod must have a duration of P1D.",
+                "The flexibility dispatch event-level intervalPeriod must have a duration of PT23H, PT24H or PT25H.",
                 "interval_period",
                 self.interval_period,
             )
@@ -873,12 +869,10 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
     """
     Validates the intervals of the dispatch.
 
-    Each interval is either a dispatch or an adjacent hour. Ids MUST be unique integers assigned in
-    ascending order starting at 0, every interval MUST define its own intervalPeriod, dispatch
-    durations MUST be PT2H, PT4H or PT6H, adjacent hours MUST be PT1H carrying a FLEX value of 0 and
-    directly abutting the dispatch they belong to, intervals MUST NOT overlap, and every interval
-    MUST fall within the event's own window. Payloads MUST carry exactly one FLEX entry with a
-    single value of zero or larger.
+    Ids MUST be unique integers assigned in ascending order starting at 0, every interval MUST define
+    its own intervalPeriod, intervals MUST NOT overlap, and every interval MUST fall within the
+    event's own window. Payloads MUST carry exactly one FLEX entry with one value per PT15M of the
+    interval's duration, every value a double in KW with at most two decimals, of zero or larger.
     """
     validation_errors: list[InitErrorDetails] = []
     intervals = self.intervals or ()
@@ -891,8 +885,6 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
 
     previous_id = -1
     placements: list[tuple[int, datetime, datetime]] = []
-    dispatch_bounds: list[tuple[datetime, datetime]] = []
-    adjacent_hour_bounds: list[tuple[datetime, datetime]] = []
 
     for position, interval in enumerate(intervals):
         if interval.id <= previous_id or (position == 0 and interval.id != 0):
@@ -917,17 +909,6 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
             continue
 
         duration = interval.interval_period.duration
-        is_adjacent_hour = duration == ADJACENT_HOUR_DURATION
-
-        if not is_adjacent_hour and duration not in DISPATCH_DURATIONS:
-            validation_errors.append(
-                error(
-                    "A flexibility dispatch event interval must be either an adjacent hour of PT1H or a dispatch "
-                    "of PT2H, PT4H or PT6H.",
-                    "intervals",
-                    self.intervals,
-                )
-            )
 
         if self.interval_period is not None:
             window_start = self.interval_period.start
@@ -935,8 +916,7 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
             if interval.interval_period.start < window_start or interval.interval_period.start + duration > window_end:
                 validation_errors.append(
                     error(
-                        "Every flexibility dispatch event interval, adjacent hours included, must fall within "
-                        "the event-level intervalPeriod.",
+                        "Every flexibility dispatch event interval must fall within the event-level intervalPeriod.",
                         "intervals",
                         self.intervals,
                     )
@@ -945,11 +925,6 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
         interval_start = interval.interval_period.start
         interval_end = interval_start + duration
         placements.append((position, interval_start, interval_end))
-
-        if is_adjacent_hour:
-            adjacent_hour_bounds.append((interval_start, interval_end))
-        elif duration in DISPATCH_DURATIONS:
-            dispatch_bounds.append((interval_start, interval_end))
 
         if len(interval.payloads) != 1 or interval.payloads[0].type != FLEX_PAYLOAD_TYPE:
             validation_errors.append(
@@ -962,59 +937,43 @@ def _dispatch_intervals_compliant(self: Event) -> list[InitErrorDetails]:  # noq
             continue
 
         values = interval.payloads[0].values
-        flex_value = as_power_value(values[0]) if len(values) == 1 else None
-        if flex_value is None:
+        if not values:
+            validation_errors.append(
+                error("The FLEX payload must carry at least one value.", "intervals", self.intervals)
+            )
+            continue
+
+        # Compared by multiplication rather than division: timedelta / int rounds to the microsecond.
+        if duration != len(values) * FLEX_VALUE_DURATION:
             validation_errors.append(
                 error(
-                    "The FLEX payload must carry exactly one value in KW, a double with at most two decimals.",
+                    "The FLEX payload must carry one value per PT15M of its interval's duration, e.g. an interval "
+                    "of PT2H carries 8 values.",
+                    "intervals",
+                    self.intervals,
+                )
+            )
+
+        parsed_values = [as_power_value(value) for value in values]
+        flex_values = [flex_value for flex_value in parsed_values if flex_value is not None]
+        if len(flex_values) != len(parsed_values):
+            validation_errors.append(
+                error(
+                    "Every FLEX value must be a double in KW with at most two decimals.",
                     "intervals",
                     self.intervals,
                 )
             )
             continue
 
-        if flex_value < 0:
+        if any(flex_value < 0 for flex_value in flex_values):
             validation_errors.append(
-                error("The FLEX payload value must be equal to or larger than zero.", "intervals", self.intervals)
-            )
-        elif is_adjacent_hour and flex_value != ADJACENT_HOUR_FLEX_VALUE:
-            validation_errors.append(
-                error(
-                    "An adjacent hour must carry a FLEX value of 0, capping the group at its ACTIVE_BASELINE.",
-                    "intervals",
-                    self.intervals,
-                )
+                error("Every FLEX value must be equal to or larger than zero.", "intervals", self.intervals)
             )
 
     validation_errors.extend(_overlap_errors(self, placements))
-    validation_errors.extend(_adjacent_hour_errors(self, adjacent_hour_bounds, dispatch_bounds))
 
     return validation_errors
-
-
-def _adjacent_hour_errors(
-    self: Event,
-    adjacent_hours: list[tuple[datetime, datetime]],
-    dispatches: list[tuple[datetime, datetime]],
-) -> list[InitErrorDetails]:
-    """
-    Validates that every adjacent hour directly abuts a dispatch in the same event.
-
-    An adjacent hour MUST be an interval of duration PT1H directly preceding or following the
-    dispatch it belongs to: either the dispatch starts exactly where the adjacent hour ends, or it
-    ends exactly where the adjacent hour starts. Abutting another adjacent hour does not count; the
-    specification is explicit that an adjacent hour belongs to a dispatch.
-    """
-    return [
-        error(
-            "An adjacent hour must directly abut the dispatch it belongs to: a dispatch interval must start "
-            "where the adjacent hour ends, or end where the adjacent hour starts.",
-            "intervals",
-            self.intervals,
-        )
-        for start, end in adjacent_hours
-        if not any(dispatch_start == end or dispatch_end == start for dispatch_start, dispatch_end in dispatches)
-    ]
 
 
 def _overlap_errors(self: Event, placements: list[tuple[int, datetime, datetime]]) -> list[InitErrorDetails]:
@@ -1050,8 +1009,8 @@ def validate_flex_dispatch_event_compliant(
 
     Args:
         event: The event to validate.
-        max_duration: The MAX_DURATION attribute of the targeted resource group, when known. Adjacent
-            hours are exempt from it. Omit to skip the check.
+        max_duration: The MAX_DURATION attribute of the targeted resource group, when known. It runs
+            from the first FLEX value above 0. Omit to skip the check.
         max_callable_kw: The group's computed ACTIVE_AVAILABLE_FLEX at publication, when known — the
             magnitude of the ACTIVE_FLEX_DELTA in the most recent flex delta report, or of the
             ACTIVE_FLEX_DELTA_OVERRIDE where the BL has overridden it. Omit to skip the check.
@@ -1083,31 +1042,32 @@ def _bounds_compliant(
 
     Both bounds live on the resource group rather than on the event, so both are skipped when the
     caller does not supply them.
+
+    MAX_DURATION is a timer that starts at the first moment a FLEX value above 0 is called: once it
+    has passed, no FLEX value may be above 0 any more. It does not reset, and gaps do not pause it.
     """
     validation_errors: list[InitErrorDetails] = []
 
-    for interval in self.intervals or ():
-        if interval.interval_period is None or len(interval.payloads) != 1:
-            continue
-
-        duration = interval.interval_period.duration
-        is_dispatch = duration in DISPATCH_DURATIONS
-
-        if is_dispatch and max_duration is not None and duration > max_duration:
+    active_periods = _active_periods(self)
+    if max_duration is not None and active_periods:
+        deadline = min(start for start, _ in active_periods) + max_duration
+        if any(end > deadline for _, end in active_periods):
             validation_errors.append(
                 error(
-                    "A dispatch interval must not exceed the MAX_DURATION of the targeted resource group.",
+                    "No FLEX value may be above 0 once the MAX_DURATION of the targeted resource group has "
+                    "passed since the first FLEX value above 0.",
                     "intervals",
                     self.intervals,
                 )
             )
 
-        values = interval.payloads[0].values
-        flex_value = as_power_value(values[0]) if len(values) == 1 else None
-        if max_callable_kw is None or flex_value is None:
+    for interval in self.intervals or ():
+        if max_callable_kw is None or len(interval.payloads) != 1:
             continue
 
-        if flex_value > max_callable_kw:
+        # Values that are not a valid power value are reported by _dispatch_intervals_compliant.
+        flex_values = (as_power_value(value) for value in interval.payloads[0].values)
+        if any(flex_value is not None and flex_value > max_callable_kw for flex_value in flex_values):
             validation_errors.append(
                 error(
                     "The FLEX value must not exceed the ACTIVE_AVAILABLE_FLEX of the targeted resource group. "
@@ -1118,6 +1078,31 @@ def _bounds_compliant(
             )
 
     return validation_errors
+
+
+def _active_periods(self: Event) -> list[tuple[datetime, datetime]]:
+    """
+    Collects the periods during which a FLEX value above 0 is called, one per value.
+
+    An interval's values split its intervalPeriod evenly: with N values, value i covers the i-th
+    N-th of the interval, which is PT15M in a compliant dispatch. Values that are not a valid power
+    value are reported by _dispatch_intervals_compliant and skipped here.
+    """
+    periods: list[tuple[datetime, datetime]] = []
+
+    for interval in self.intervals or ():
+        if interval.interval_period is None or len(interval.payloads) != 1 or not interval.payloads[0].values:
+            continue
+
+        values = interval.payloads[0].values
+        step = interval.interval_period.duration / len(values)
+        for index, value in enumerate(values):
+            flex_value = as_power_value(value)
+            if flex_value is not None and flex_value > 0:
+                start = interval.interval_period.start + index * step
+                periods.append((start, start + step))
+
+    return periods
 
 
 # --------------------------------------------------------------------------------------------------------------

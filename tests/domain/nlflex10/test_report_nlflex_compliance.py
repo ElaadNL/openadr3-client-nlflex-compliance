@@ -82,7 +82,7 @@ def _acknowledgment_report() -> NewReport:
 
 
 def _delivery_report() -> NewReport:
-    """Helper function to create a compliant delivery report for one adjacent hour."""
+    """Helper function to create a compliant delivery report for one PT1H interval."""
     return _report(
         report_name=None,
         resources=(
@@ -122,27 +122,27 @@ def _operational_status_report() -> NewReport:
 
 
 def test_the_registration_report_is_recognised() -> None:
-    """Discriminated by its reportName."""
+    """Discriminated by payload type."""
     assert report_kind(_registration_report()) is ReportKind.RESOURCE_REGISTRATION
 
 
 def test_the_operational_status_report_is_recognised() -> None:
-    """Discriminated by its reportName."""
+    """Discriminated by payload type."""
     assert report_kind(_operational_status_report()) is ReportKind.OPERATIONAL_STATUS
 
 
 def test_the_flex_delta_report_is_recognised() -> None:
-    """No fixed reportName, so discriminated by payload type."""
+    """Discriminated by payload type."""
     assert report_kind(_flex_delta_report()) is ReportKind.FLEX_DELTA
 
 
 def test_the_acknowledgment_report_is_recognised() -> None:
-    """No fixed reportName, so discriminated by payload type."""
+    """Discriminated by payload type."""
     assert report_kind(_acknowledgment_report()) is ReportKind.FLEX_ACKNOWLEDGMENT
 
 
 def test_the_delivery_report_is_recognised() -> None:
-    """No fixed reportName, so discriminated by payload type."""
+    """Discriminated by payload type."""
     assert report_kind(_delivery_report()) is ReportKind.FLEX_DELIVERY
 
 
@@ -348,12 +348,13 @@ def test_deregistration_report_valid() -> None:
     assert validate_registration_report_compliant(_create_registration_report(payloads=payloads)) is None
 
 
-def test_report_name_must_be_resource_registration() -> None:
-    """Both operations use the RESOURCE_REGISTRATION report name."""
-    errors = validate_registration_report_compliant(_create_registration_report(report_name="REGISTRATION"))
+def test_registration_report_name_is_optional() -> None:
+    """The reportName is optional: any value, or none at all, is accepted and plays no part in routing."""
+    for report_name in (None, "REGISTRATION"):
+        report = _create_registration_report(report_name=report_name)
 
-    assert errors is not None
-    assert any("'RESOURCE_REGISTRATION'" in str(error["type"]) for error in errors)
+        assert report_kind(report) is ReportKind.RESOURCE_REGISTRATION
+        assert validate_report_nlflex_compliant(report) is None
 
 
 def test_registration_a_per_asset_resource_entry_is_rejected() -> None:
@@ -654,7 +655,7 @@ def test_a_flex_delta_payload_carries_a_single_value() -> None:
 DELIVERED_FLEX = ReportPayloadType("DELIVERED_FLEX")
 FLEX = EventPayloadType("FLEX")
 
-ADJACENT_HOUR_START = datetime(2026, 1, 2, 16, 0, 0, tzinfo=UTC)
+PRE_DISPATCH_START = datetime(2026, 1, 2, 16, 0, 0, tzinfo=UTC)
 DISPATCH_START = datetime(2026, 1, 2, 17, 0, 0, tzinfo=UTC)
 
 
@@ -699,7 +700,7 @@ def _delivery_resources(intervals: tuple[Interval, ...] = _UNSET) -> tuple[Repor
             resource_name="AGGREGATED_REPORT",
             intervals=(
                 (
-                    _delivery_interval(0, ADJACENT_HOUR_START, timedelta(hours=1), 0),
+                    _delivery_interval(0, PRE_DISPATCH_START, timedelta(hours=1), 0),
                     _delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),
                 )
                 if intervals is _UNSET
@@ -723,7 +724,7 @@ def _event_intervals() -> tuple[Interval[EventPayload], ...]:
     return (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(EventPayload(type=FLEX, values=(0,)),),
         ),
         Interval(
@@ -832,7 +833,7 @@ def test_delivery_report_value_count_follows_interval_duration() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0)),),
         ),
     )
@@ -850,7 +851,7 @@ def test_delivery_report_values_are_not_negative() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0, -5, 0)),),
         ),
     )
@@ -880,7 +881,7 @@ def test_delivery_report_payload_type_must_be_delivered_flex() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=ACK, values=(True,)),),
         ),
     )
@@ -894,7 +895,7 @@ def test_delivery_report_payload_type_must_be_delivered_flex() -> None:
 
 
 def test_delivery_report_mirrors_every_event_interval() -> None:
-    """One report interval per event interval, adjacent hours included."""
+    """One report interval per event interval."""
     intervals = (_delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),)
 
     errors = validate_flex_delivery_report_compliant(
@@ -909,7 +910,7 @@ def test_delivery_report_mirrors_every_event_interval() -> None:
 def test_delivery_report_reuses_event_interval_periods() -> None:
     """Each report interval repeats the intervalPeriod of the event interval it reports on."""
     intervals = (
-        _delivery_interval(0, ADJACENT_HOUR_START, timedelta(hours=1), 0),
+        _delivery_interval(0, PRE_DISPATCH_START, timedelta(hours=1), 0),
         _delivery_interval(1, DISPATCH_START + timedelta(hours=1), timedelta(hours=4), 200),
     )
 
@@ -934,7 +935,7 @@ def test_a_delivered_value_with_three_decimals_is_rejected() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0, 0, 0.125)),),
         ),
     )
@@ -952,7 +953,7 @@ def test_a_delivered_value_with_two_decimals_is_accepted() -> None:
     intervals = (
         Interval(
             id=0,
-            interval_period=IntervalPeriod(start=ADJACENT_HOUR_START, duration=timedelta(hours=1)),
+            interval_period=IntervalPeriod(start=PRE_DISPATCH_START, duration=timedelta(hours=1)),
             payloads=(ReportPayload(type=DELIVERED_FLEX, values=(0, 0, 0, 0.25)),),
         ),
     )
@@ -1021,12 +1022,13 @@ def test_one_entry_per_resource_being_reported_on() -> None:
     assert validate_operational_status_report_compliant(report) is None
 
 
-def test_report_name_must_be_operational_status() -> None:
-    """The report is discriminated by its reportName."""
-    errors = validate_operational_status_report_compliant(_create_operational_status_report(report_name="STATUS"))
+def test_operational_status_report_name_is_optional() -> None:
+    """The reportName is optional: any value, or none at all, is accepted and plays no part in routing."""
+    for report_name in (None, "STATUS"):
+        report = _create_operational_status_report(report_name=report_name)
 
-    assert errors is not None
-    assert any("'OPERATIONAL_STATUS'" in str(error["type"]) for error in errors)
+        assert report_kind(report) is ReportKind.OPERATIONAL_STATUS
+        assert validate_report_nlflex_compliant(report) is None
 
 
 def test_operational_status_exactly_one_interval_with_id_zero() -> None:

@@ -72,12 +72,9 @@ def test_a_resource_not_yet_registered_is_valid() -> None:
     assert validate_resource_nlflex_compliant(_create_resource(_without("REGISTRATION_STATUS"))) is None
 
 
-def test_targets_must_contain_the_asset_id() -> None:
-    """The Asset-ID is the node handle the asset is targeted and referenced through."""
-    errors = validate_resource_nlflex_compliant(_create_resource(targets=("ASSET-0002",)))
-
-    assert errors is not None
-    assert any("own Asset-ID" in str(error["type"]) for error in errors)
+def test_targets_need_not_contain_the_asset_id() -> None:
+    """The profile places no constraint on the targets of a resource."""
+    assert validate_resource_nlflex_compliant(_create_resource(targets=("ASSET-0002",))) is None
 
 
 def test_absent_targets_are_not_validated() -> None:
