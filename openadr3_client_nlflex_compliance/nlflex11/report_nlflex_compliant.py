@@ -308,25 +308,9 @@ def validate_flex_delta_report_compliant(report: Report) -> list[InitErrorDetail
 
 
 # --------------------------------------------------------------------------------------------------------------
-# Flexibility dispatch acknowledgment and flex delivery report.
-#
-# These are the two reports an aggregator answers a flexibility dispatch with:
-#
-# - The acknowledgment report ("Flexibility dispatch acknowledgment") confirms that the `FLEX` event
-#   arrived, and nothing beyond that.
-# - The delivery report ("Flexibility delivery reporting") states what the resource group actually
-#   delivered, per 15 minutes, once every interval of the event has transpired.
-#
-# Both are specified in the OpenADR DER profile specification v1.1.0. The report dispatcher tells the
-# kinds of report apart by the payload types they carry (ACK for the acknowledgment, DELIVERED_FLEX for
-# the delivery report), never by reportName, which is optional.
-#
-# The two validators are exported separately as well as behind the dispatcher, so a caller that knows
-# which report it asked for can use them directly. One rule is not checkable from the report alone:
-# a delivery report MUST carry one interval per interval of the `FLEX` event it
-# references, reusing that interval's id and intervalPeriod. The value count per interval follows from
-# the interval's own duration and is checked here; matching against the event needs the event, so
-# `validate_flex_delivery_report_compliant` accepts the event's intervals optionally.
+# Flexibility dispatch acknowledgment and flex delivery report: the two reports an aggregator answers
+# a FLEX event with ("Flexibility dispatch acknowledgment", "Flexibility delivery reporting"). They are
+# told apart by payload type, ACK or DELIVERED_FLEX, never by reportName, which is optional.
 # --------------------------------------------------------------------------------------------------------------
 
 ACK_PAYLOAD_TYPE = ReportPayloadType("ACK")
