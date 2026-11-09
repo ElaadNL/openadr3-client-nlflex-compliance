@@ -50,7 +50,7 @@ def _create_resource(
     Helper function to create a resource with the specified values.
 
     Any argument left unset defaults to a compliant value. Passing ``None`` for targets is
-    preserved, to allow testing a resource a VEN client submitted.
+    preserved.
     """
     resolved_attributes = _default_valid_attributes() if attributes is _UNSET else attributes
     return NewResourceBlRequest(
@@ -72,17 +72,10 @@ def test_a_resource_not_yet_registered_is_valid() -> None:
     assert validate_resource_nlflex_compliant(_create_resource(_without("REGISTRATION_STATUS"))) is None
 
 
-def test_targets_must_contain_the_asset_id() -> None:
-    """The Asset-ID is the node handle the asset is targeted and referenced through."""
-    errors = validate_resource_nlflex_compliant(_create_resource(targets=("ASSET-0002",)))
-
-    assert errors is not None
-    assert any("own Asset-ID" in str(error["type"]) for error in errors)
-
-
-def test_absent_targets_are_not_validated() -> None:
-    """A resource submitted by a VEN client carries no targets field for the BL to have filled in."""
-    assert validate_resource_nlflex_compliant(_create_resource(targets=None)) is None
+@pytest.mark.parametrize("targets", [None, (), ("SOMETHING-ELSE",)])
+def test_resource_targets_are_not_inspected(targets: tuple[str, ...] | None) -> None:
+    """The profile puts no requirement on a resource's targets."""
+    assert validate_resource_nlflex_compliant(_create_resource(targets=targets)) is None
 
 
 def test_dso_id_is_required() -> None:

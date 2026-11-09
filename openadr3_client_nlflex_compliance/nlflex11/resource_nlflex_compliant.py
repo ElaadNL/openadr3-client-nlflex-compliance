@@ -33,25 +33,6 @@ REGISTRATION_STATUS_ATTRIBUTE = VenResourceAttributeType("REGISTRATION_STATUS")
 REJECTED_REASON_ATTRIBUTE = VenResourceAttributeType("REJECTED_REASON")
 
 
-def _targets_compliant(self: Resource) -> list[InitErrorDetails]:
-    """
-    Validates that the resource targets its own Asset-ID, when targets are present.
-
-    The targets MUST contain the Asset-ID, which serves as the node handle through which the asset
-    is targeted and referenced as a resource group child. Targets can only be assigned by a BL
-    client; a resource submitted by a VEN client does not carry a targets field at all, so there is
-    nothing to validate until the BL populates it.
-    """
-    targets = getattr(self, "targets", None)
-    if targets is None:
-        return []
-
-    if self.resource_name not in targets:
-        return [error("The resource targets must include its own Asset-ID.", "targets", targets)]
-
-    return []
-
-
 def _dso_id_attribute_compliant(self: Resource) -> list[InitErrorDetails]:
     """Validates that the resource names the DSO responsible for it, by its EAN13."""
     dso_id = self.attributes.get_by_type(DSO_ID_ATTRIBUTE) if self.attributes else None
@@ -186,7 +167,7 @@ def _registration_status_attribute_compliant(self: Resource) -> list[InitErrorDe
 
 def validate_resource_nlflex_compliant(resource: Resource) -> list[InitErrorDetails] | None:
     """
-    Validates that a resource is compliant with the OpenADR DER profile specification v1.0.0.
+    Validates that a resource is compliant with the OpenADR DER profile specification v1.1.0.
 
     Args:
         resource: The resource to validate.
@@ -197,7 +178,6 @@ def validate_resource_nlflex_compliant(resource: Resource) -> list[InitErrorDeta
     """
     validation_errors: list[InitErrorDetails] = []
 
-    validation_errors.extend(_targets_compliant(resource))
     validation_errors.extend(_dso_id_attribute_compliant(resource))
     validation_errors.extend(_ean_attribute_compliant(resource))
     validation_errors.extend(_flex_type_attribute_compliant(resource))
