@@ -18,6 +18,7 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 from enum import StrEnum
+from typing import Final
 
 from openadr3_client.oadr310.models.program.program import Program
 from openadr3_client.oadr310.models.program.program_attribute import ProgramAttributeType
@@ -30,14 +31,19 @@ from openadr3_client_nlflex_compliance.nlflex11._common import (
     is_registration_operator,
 )
 
-# The version of this specification follows the Semantic Versioning standard (see "Profile
-# specification versioning"). The named group is the x.y.z core, which the lock step compares; the
-# pre-release and build suffixes are part of the PROGRAM_TYPE value but not of that comparison.
-_SEMVER = (
-    r"(?P<version>(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))"
-    r"(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
-    r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))"
-    r"?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?"
+# The version of this specification. PROGRAM_TYPE carries it as "x.x.x", which "Profile specification
+# versioning" defines as the version of this specification. A PATCH release changes no rule, so any
+# 1.1.z is a program for this version of the specification; a later MINOR or MAJOR version is not. A
+# pre-release or build of such a version (1.1.0-rc.1, 1.1.2+build.5) is the same version, so the
+# Semantic Versioning suffixes are accepted after it.
+SPECIFICATION_MAJOR_MINOR: Final = "1.1"
+# The named group is the x.y.z core, which the lock step compares; the suffixes are not part of it.
+_SPECIFICATION_VERSION = rf"(?P<version>{re.escape(SPECIFICATION_MAJOR_MINOR)}\.(?:0|[1-9]\d*))"
+
+# The pre-release and build suffixes of the Semantic Versioning standard.
+_SEMVER_SUFFIXES = (
+    r"(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?"
+    r"(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?"
 )
 
 
@@ -51,8 +57,8 @@ class ProgramKind(StrEnum):
 # PROGRAM_TYPE MUST equal "DER_REGISTRATION_INTERFACE-x.x.x" for the registration program and
 # "DER_DISPATCH_INTERFACE-x.x.x" for a dispatch program, where x.x.x is the version of this specification.
 _PROGRAM_TYPE_PATTERNS = {
-    ProgramKind.REGISTRATION: re.compile(rf"^DER_REGISTRATION_INTERFACE-{_SEMVER}$"),
-    ProgramKind.DISPATCH: re.compile(rf"^DER_DISPATCH_INTERFACE-{_SEMVER}$"),
+    ProgramKind.REGISTRATION: re.compile(rf"DER_REGISTRATION_INTERFACE-{_SPECIFICATION_VERSION}{_SEMVER_SUFFIXES}"),
+    ProgramKind.DISPATCH: re.compile(rf"DER_DISPATCH_INTERFACE-{_SPECIFICATION_VERSION}{_SEMVER_SUFFIXES}"),
 }
 
 PROGRAM_TYPE_ATTRIBUTE = ProgramAttributeType.PROGRAM_TYPE
@@ -95,8 +101,9 @@ def program_kind(program: Program) -> ProgramKind | None:
     Determines which kind of program this is.
 
     Returns:
-        The kind, or None unless the program has exactly one PROGRAM_TYPE value matching the
-        registration or the dispatch format.
+        The kind, or None unless the program has exactly one PROGRAM_TYPE value naming the registration
+        or the dispatch program of version 1.1.z of the specification, optionally with a pre-release
+        or build suffix.
 
     """
     matched = _match_program_type(program)
@@ -122,10 +129,10 @@ def _program_type_attribute_compliant(program: Program) -> list[InitErrorDetails
 
     return [
         error(
-            "The program must have exactly one PROGRAM_TYPE value, in the format "
-            "DER_REGISTRATION_INTERFACE-x.y.z for the registration program or "
-            "DER_DISPATCH_INTERFACE-x.y.z for a dispatch program, where x.y.z is the version of the "
-            "profile specification the program implements.",
+            "The program must have exactly one PROGRAM_TYPE value: "
+            f"DER_REGISTRATION_INTERFACE-{SPECIFICATION_MAJOR_MINOR}.z for the registration program or "
+            f"DER_DISPATCH_INTERFACE-{SPECIFICATION_MAJOR_MINOR}.z for a dispatch program, where z is the "
+            f"PATCH version, as this is version {SPECIFICATION_MAJOR_MINOR} of the profile specification.",
             "attributes",
             program.attributes,
         )
