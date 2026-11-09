@@ -62,8 +62,8 @@ def error(message: str, loc: str, value: object) -> InitErrorDetails:
 # `GOPACS`. The following identifiers MUST be used", followed by seven entries. Membership is
 # therefore enforced, not just the EAN13 shape: a well formed EAN13 that names no Dutch DSO is not a
 # DSO_ID. Aggregator identifiers are the opposite case: "Aggregator identifiers" names no table,
-# since an aggregator obtains its EAN13 by registering with the market, so those
-# are validated on shape alone.
+# since "An aggregator obtains an EAN13 code by registering as a Congestion Service Provider (CSP)",
+# so those are validated on shape alone.
 # --------------------------------------------------------------------------------------------------------------
 
 EAN13_LENGTH = 13

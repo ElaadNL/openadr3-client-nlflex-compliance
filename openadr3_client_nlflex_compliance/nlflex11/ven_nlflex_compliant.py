@@ -6,8 +6,8 @@
 Compliance validator for the VEN of the OpenADR DER profile specification v1.1.0.
 
 In OpenADR a VEN is an actor that can receive objects from the VTN. In this profile the VEN is an
-aggregator, and its venName is that aggregator's identifier: an EAN13, obtained by
-registering with the market.
+aggregator, and its venName is that aggregator's identifier: an EAN13. "An aggregator obtains an
+EAN13 code by registering as a Congestion Service Provider (CSP)" (see "Aggregator identifiers").
 
 The targets of a VEN are set by the BL and hold the Group-ID of every resource group the
 aggregator is allowed to see before it has registered an asset into that group. They are optional and
