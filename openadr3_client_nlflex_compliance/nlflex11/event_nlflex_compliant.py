@@ -713,13 +713,18 @@ def validate_flex_delta_override_event_compliant(event: Event) -> list[InitError
 # Rules that cannot be checked against a single event object are deliberately left out:
 #
 # - Every FLEX value MUST NOT exceed the group's computed ACTIVE_AVAILABLE_FLEX ("Bounds on the called
-#   amount"), and the windows above 0 MUST fit within the group's MAX_DURATION ("Maximum dispatch
-#   duration per day"). Both values live on the resource group, not on the event, so
-#   `validate_flex_dispatch_event_compliant` accepts them as optional bounds from a caller that holds
-#   the group.
+#   amount"), and every window above 0 MUST end no later than the start of the first window above 0
+#   plus the group's MAX_DURATION ("Maximum dispatch duration per day"). Both values live on the
+#   resource group, not on the event, so `validate_flex_dispatch_event_compliant` accepts them as
+#   optional bounds from a caller that holds the group. MAX_DURATION is counted over the whole event
+#   by `reduction_span`: windows of 0 before the first window above 0 and after the last do not count,
+#   while windows of 0 between them and gaps between intervals do.
 # - The publication deadline ("Publication and notice period") is a moment in time, not a property of
 #   the event. What the event does carry, a window starting at local midnight and lasting that local
 #   day, is checked.
+# - Notation rules are lost when the message is parsed into the model: timestamps written in Zulu
+#   notation, and durations written in hours rather than days (PT24H, not P1D). They are checked
+#   against the raw input instead.
 # --------------------------------------------------------------------------------------------------------------
 
 FLEX_PAYLOAD_TYPE = EventPayloadType("FLEX")
@@ -1097,6 +1102,70 @@ def validate_flex_dispatch_event_compliant(
     return validation_errors or None
 
 
+def reduction_span(intervals: Sequence[Interval[EventPayload]]) -> tuple[datetime, datetime] | None:
+    """
+    Measures the stretch of a dispatch over which the group is asked to reduce its offtake.
+
+    "Maximum dispatch duration per day": the limit "starts counting at the start of the first 15
+    minute window with a FLEX value above 0", and every window above 0 "across all its intervals,
+    MUST end no later than that start plus the group's MAX_DURATION". Windows of 0 between two
+    windows above 0 count, and so do gaps between intervals, so the span is wall-clock time from the
+    start of the first window above 0 to the end of the last one.
+
+    Intervals are read in time order whatever order they are listed in: ids MUST NOT be used to
+    determine chronological order. Window `i` of an interval starts at the interval's start plus
+    `i` times PT15M. An interval without its own intervalPeriod, without exactly one FLEX payload,
+    or whose value count does not match its duration is skipped: the shape rules report it, and its
+    windows have no reliable place in time.
+
+    Args:
+        intervals: The intervals of a FLEX event.
+
+    Returns:
+        The start of the first window above 0 and the end of the last one, or None when no window
+        is above 0.
+
+    """
+    reducing_windows: list[tuple[datetime, datetime]] = []
+
+    for interval in intervals:
+        windows = _flex_windows_on_the_grid(interval)
+        if windows is None:
+            continue
+
+        interval_start, values = windows
+        reducing_windows.extend(
+            (interval_start + index * FIFTEEN_MINUTES, interval_start + (index + 1) * FIFTEEN_MINUTES)
+            for index, value in enumerate(values)
+            if (power_value := as_power_value(value)) is not None and power_value > 0
+        )
+
+    if not reducing_windows:
+        return None
+
+    return min(start for start, _ in reducing_windows), max(end for _, end in reducing_windows)
+
+
+def _flex_windows_on_the_grid(
+    interval: Interval[EventPayload],
+) -> tuple[datetime, Sequence[AllowedPayloadInputs]] | None:
+    """
+    Reads the start and FLEX values of an interval whose every value has a 15 minute window of its own.
+
+    Returns None for an interval the shape rules reject: no own intervalPeriod, not exactly one FLEX
+    payload, a duration off the 15 minute grid, or a value count that does not match the duration.
+    """
+    period = interval.interval_period
+    if period is None or len(interval.payloads) != 1 or interval.payloads[0].type != FLEX_PAYLOAD_TYPE:
+        return None
+
+    values = interval.payloads[0].values
+    if period.duration % FIFTEEN_MINUTES != timedelta(0) or len(values) != period.duration // FIFTEEN_MINUTES:
+        return None
+
+    return period.start, values
+
+
 def _bounds_compliant(
     self: Event,
     *,
@@ -1107,29 +1176,34 @@ def _bounds_compliant(
     Validates the dispatch against the properties of the resource group it targets.
 
     Both bounds live on the resource group rather than on the event, so each is skipped when the
-    caller does not supply it. Values that are not power values are reported by the interval rules
-    and are not compared here.
+    caller does not supply it. Only the values of a FLEX payload are read, and values that are not
+    power values are not compared: the shape rules report both.
+
+    MAX_DURATION is held against the reduction span of the whole event, from the start of the first
+    window above 0 to the end of the last one (see `reduction_span`). ACTIVE_AVAILABLE_FLEX is held
+    against every FLEX value.
     """
     validation_errors: list[InitErrorDetails] = []
+    intervals = self.intervals or ()
 
-    for interval in self.intervals or ():
-        if interval.interval_period is None or len(interval.payloads) != 1:
-            continue
-
-        # Stricter than "Maximum dispatch duration per day", which counts only from the first window
-        # above 0 to the end of the last one: this holds the whole interval, windows of 0 included,
-        # against MAX_DURATION.
-        if max_duration is not None and interval.interval_period.duration > max_duration:
+    span = reduction_span(intervals)
+    if max_duration is not None and span is not None:
+        first_start, last_end = span
+        if last_end - first_start > max_duration:
             validation_errors.append(
                 error(
-                    "A flexibility dispatch event interval must not last longer than the MAX_DURATION of the "
-                    "targeted resource group.",
+                    "Every flexibility dispatch event window with a FLEX value above 0 must end no later than the "
+                    "start of the first such window plus the MAX_DURATION of the targeted resource group.",
                     "intervals",
                     self.intervals,
                 )
             )
 
-        if max_callable_kw is None:
+    if max_callable_kw is None:
+        return validation_errors
+
+    for interval in intervals:
+        if len(interval.payloads) != 1 or interval.payloads[0].type != FLEX_PAYLOAD_TYPE:
             continue
 
         power_values = (as_power_value(value) for value in interval.payloads[0].values)

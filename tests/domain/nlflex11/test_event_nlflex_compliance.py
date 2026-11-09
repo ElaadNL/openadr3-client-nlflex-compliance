@@ -27,6 +27,7 @@ from openadr3_client.oadr310.models.unit import Unit
 from openadr3_client_nlflex_compliance.nlflex11.event_nlflex_compliant import (
     EventKind,
     event_kind,
+    reduction_span,
     validate_baseline_event_compliant,
     validate_event_nlflex_compliant,
     validate_event_program_ownership,
@@ -1383,21 +1384,111 @@ def test_an_interval_must_carry_a_single_flex_payload() -> None:
     assert any("exactly one payload of type 'FLEX'" in str(error["type"]) for error in errors)
 
 
+GROUP_MAX_DURATION = timedelta(hours=4)
+
+# 15:00Z is 16:00 local time on 2026-01-02, the start of the specification example's interval.
+AFTERNOON = EXAMPLE_INTERVAL_START
+
+
+def _max_duration_errors(event: NewEvent) -> list[Any]:
+    """Helper function to collect the MAX_DURATION errors of a dispatch held against GROUP_MAX_DURATION."""
+    errors = validate_flex_dispatch_event_compliant(event, max_duration=GROUP_MAX_DURATION) or []
+    return [error for error in errors if "MAX_DURATION" in str(error["type"])]
+
+
 def test_dispatch_must_not_exceed_group_max_duration() -> None:
-    """An interval longer than the MAX_DURATION of the group it targets is rejected."""
+    """Windows above 0 running for longer than the MAX_DURATION of the targeted group are rejected."""
     event = _create_dispatch_event(
         intervals=(_dispatch_interval(0, WINDOW_START + timedelta(hours=1), timedelta(hours=6), 100),)
     )
 
-    errors = validate_flex_dispatch_event_compliant(event, max_duration=timedelta(hours=4))
+    assert len(_max_duration_errors(event)) == 1
+
+
+def test_the_example_uses_exactly_the_max_duration() -> None:
+    """The specification's example: sixteen windows of 200 between windows of 0 use exactly PT4H."""
+    assert validate_flex_dispatch_event_compliant(_create_dispatch_event(), max_duration=GROUP_MAX_DURATION) is None
+
+
+def test_zero_windows_outside_the_stretch_do_not_count() -> None:
+    """Windows of 0 before the first window above 0 and after the last, in any interval, are not counted."""
+    values = (0,) * 8 + (200,) * 16 + (0,) * 8
+    event = _create_dispatch_event(
+        intervals=(
+            _dispatch_interval(0, WINDOW_START + timedelta(hours=1), timedelta(hours=2), 0),
+            _dispatch_interval_with_values(1, AFTERNOON - timedelta(hours=1), timedelta(hours=8), values),
+            _dispatch_interval(2, AFTERNOON + timedelta(hours=7), timedelta(hours=1), 0),
+        )
+    )
+
+    assert _max_duration_errors(event) == []
+
+
+def test_zero_windows_inside_the_stretch_count() -> None:
+    """Windows of 0 between two windows above 0 count: PT4H15M from the first 200 to the end of the last."""
+    values = (200,) + (0,) * 15 + (200,)
+    event = _create_dispatch_event(
+        intervals=(_dispatch_interval_with_values(0, AFTERNOON, timedelta(hours=4, minutes=15), values),)
+    )
+
+    assert len(_max_duration_errors(event)) == 1
+
+
+def test_a_gap_between_intervals_counts() -> None:
+    """MAX_DURATION is wall-clock time: PT1H from 15:00Z and PT1H from 18:30Z span PT4H30M."""
+    event = _create_dispatch_event(
+        intervals=(
+            _dispatch_interval(0, AFTERNOON, timedelta(hours=1), 200),
+            _dispatch_interval(1, AFTERNOON + timedelta(hours=3, minutes=30), timedelta(hours=1), 200),
+        )
+    )
+
+    assert len(_max_duration_errors(event)) == 1
+
+
+def test_intervals_out_of_order_are_counted_in_time_order() -> None:
+    """Interval ids do not give chronological order, so the span is read from the interval starts."""
+    later = _dispatch_interval(0, AFTERNOON + timedelta(hours=3, minutes=30), timedelta(hours=1), 200)
+    earlier = _dispatch_interval(1, AFTERNOON, timedelta(hours=1), 200)
+    event = _create_dispatch_event(intervals=(later, earlier))
+
+    assert reduction_span((later, earlier)) == (AFTERNOON, AFTERNOON + timedelta(hours=4, minutes=30))
+    assert len(_max_duration_errors(event)) == 1
+
+
+def test_an_event_of_only_zeros_has_no_reduction_span() -> None:
+    """A dispatch that only holds the group at its baseline asks for no reduction, so MAX_DURATION is not used."""
+    intervals = (_dispatch_interval(0, WINDOW_START, timedelta(hours=24), 0),)
+
+    assert reduction_span(intervals) is None
+    assert _max_duration_errors(_create_dispatch_event(intervals=intervals)) == []
+
+
+def test_a_malformed_interval_is_left_out_of_the_reduction_span() -> None:
+    """An interval whose value count does not match its duration is reported by the shape rules, not counted."""
+    malformed = _dispatch_interval_with_values(1, AFTERNOON + timedelta(hours=5), timedelta(hours=1), (200,) * 3)
+    intervals = (_dispatch_interval(0, AFTERNOON, timedelta(hours=1), 200), malformed)
+
+    assert reduction_span(intervals) == (AFTERNOON, AFTERNOON + timedelta(hours=1))
+
+
+def test_a_payload_of_another_type_is_not_held_against_the_bounds() -> None:
+    """A wrong payload type is reported once, by the shape rules, and its values are not read as FLEX values."""
+    event = _create_dispatch_event(
+        intervals=(
+            Interval(
+                id=0,
+                interval_period=IntervalPeriod(start=AFTERNOON, duration=timedelta(hours=6)),
+                payloads=(EventPayload(type=EventPayloadType("ACTIVE_BASELINE"), values=(300,) * 24),),
+            ),
+        )
+    )
+
+    errors = validate_flex_dispatch_event_compliant(event, max_duration=GROUP_MAX_DURATION, max_callable_kw=200)
 
     assert errors is not None
-    assert any("MAX_DURATION" in str(error["type"]) for error in errors)
-
-
-def test_an_interval_within_max_duration_is_accepted() -> None:
-    """An interval no longer than the group's MAX_DURATION passes the check."""
-    assert validate_flex_dispatch_event_compliant(_create_dispatch_event(), max_duration=timedelta(hours=6)) is None
+    assert len(errors) == 1
+    assert "exactly one payload of type 'FLEX'" in str(errors[0]["type"])
 
 
 def test_call_must_not_exceed_offered_flexibility() -> None:
