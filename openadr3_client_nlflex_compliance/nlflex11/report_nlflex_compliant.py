@@ -525,7 +525,8 @@ def _mirrors_event_intervals(
     reported = {interval.id: interval for interval in resource.intervals}
     expected = {interval.id: interval for interval in event_intervals}
 
-    if reported.keys() != expected.keys():
+    # A dict keeps one entry per id, so a repeated id leaves fewer keys than intervals.
+    if reported.keys() != expected.keys() or len(reported) != len(resource.intervals):
         return [
             error(
                 "The delivery report must contain exactly one interval per interval of the FLEX event, "

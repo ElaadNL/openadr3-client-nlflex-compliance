@@ -939,6 +939,23 @@ def test_delivery_report_mirrors_every_event_interval() -> None:
     assert any("one interval per interval of the FLEX event" in str(error["type"]) for error in errors)
 
 
+def test_delivery_report_reporting_an_event_interval_twice_is_rejected() -> None:
+    """Exactly one report interval per event interval, so a repeated id is an error even when every id matches."""
+    intervals = (
+        _delivery_interval(0, HOUR_BEFORE_DISPATCH_START, timedelta(hours=1), 0),
+        _delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),
+        _delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),
+    )
+
+    errors = validate_flex_delivery_report_compliant(
+        _create_delivery_report(resources=_delivery_resources(intervals=intervals)),
+        event_intervals=_event_intervals(),
+    )
+
+    assert errors is not None
+    assert any("one interval per interval of the FLEX event" in str(error["type"]) for error in errors)
+
+
 def test_delivery_report_reuses_event_interval_periods() -> None:
     """Each report interval repeats the intervalPeriod of the event interval it reports on."""
     intervals = (
