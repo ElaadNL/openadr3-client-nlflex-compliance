@@ -27,11 +27,13 @@ from itertools import pairwise
 from openadr3_client._models.common.payload import AllowedPayloadInputs
 from openadr3_client.oadr310.models.event.event import Event
 from openadr3_client.oadr310.models.event.event_payload import EventPayload, EventPayloadType
+from openadr3_client.oadr310.models.program.program import Program, ServerProgram
 from openadr3_client.oadr310.models.report.report_payload import ReportIntervals, ReportPayloadType
 from openadr3_client.oadr310.models.unit import Unit
 from pydantic_core import InitErrorDetails
 
 from openadr3_client_nlflex_compliance.nlflex11._common import as_power_value, error, is_power_value, is_uuid
+from openadr3_client_nlflex_compliance.nlflex11.program_nlflex_compliant import ProgramKind, program_kind
 
 # --------------------------------------------------------------------------------------------------------------
 # Reporting anchor event.
@@ -1182,6 +1184,64 @@ def event_kind(event: Event) -> EventKind | None:
         return EventKind.REPORTING_ANCHOR
 
     return None
+
+
+# The program kind that parents each kind of event, as the "Program kinds" table of "Program" lists.
+_OWNING_PROGRAM_KIND = {
+    EventKind.REPORTING_ANCHOR: ProgramKind.REGISTRATION,
+    EventKind.BASELINE: ProgramKind.REGISTRATION,
+    EventKind.FLEX_DELTA_OVERRIDE: ProgramKind.REGISTRATION,
+    EventKind.FLEXIBILITY_DISPATCH: ProgramKind.DISPATCH,
+}
+
+
+def validate_event_program_ownership(event: Event, program: Program) -> list[InitErrorDetails]:
+    """
+    Validates that the event lives in the kind of program that owns its kind of event.
+
+    The "Program" and "Events" sections give each BL its own program: GOPACS creates the reporting
+    anchor, baseline and flex delta override events in the registration program, and a DSO creates
+    FLEX events in its dispatch program. This is a rule over an event and its program together, so it
+    is not part of the per-event validator and is exported for callers that hold both.
+    An event or a program of no known kind is left out: their own validators already report them.
+
+    Args:
+        event: The event to check.
+        program: The program the event is created in.
+
+    Returns:
+        One error per broken rule, or an empty list.
+
+    """
+    kind = event_kind(event)
+    actual_program_kind = program_kind(program)
+    if kind is None or actual_program_kind is None:
+        return []
+
+    errors: list[InitErrorDetails] = []
+
+    # A program not yet stored on the VTN has no id to compare with.
+    if isinstance(program, ServerProgram) and event.program_id != program.id:
+        errors.append(
+            error(
+                f"The programID of the event must be the id of the program it belongs to, {program.id}.",
+                "programID",
+                event.program_id,
+            )
+        )
+
+    required_program_kind = _OWNING_PROGRAM_KIND[kind]
+    if actual_program_kind is not required_program_kind:
+        errors.append(
+            error(
+                f"A {kind.value.lower()} event must be created in the {required_program_kind.value.lower()} "
+                f'program (see "Program"), but its program is a {actual_program_kind.value.lower()} program.',
+                "programID",
+                event.program_id,
+            )
+        )
+
+    return errors
 
 
 def validate_event_nlflex_compliant(event: Event) -> list[InitErrorDetails] | None:
