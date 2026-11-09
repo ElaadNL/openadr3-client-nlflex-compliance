@@ -235,6 +235,42 @@ def test_programs_on_two_versions_are_not_in_lock_step() -> None:
     assert "same version" in str(errors[0]["type"])
 
 
+def test_two_majors_each_in_lock_step_pass() -> None:
+    """During a MAJOR phase-out both MAJOR versions are present, each in lock step on its own."""
+    programs = [
+        _typed_program(REGISTRATION),
+        _typed_program(DISPATCH),
+        _typed_program("DER_REGISTRATION_INTERFACE-2.0.0"),
+        _typed_program("DER_DISPATCH_INTERFACE-2.0.0"),
+    ]
+
+    assert validate_programs_lock_step(programs) == []
+
+
+def test_only_the_major_out_of_lock_step_is_reported() -> None:
+    """A MAJOR with two versions gets an error naming only its own versions, the other MAJOR stays clean."""
+    programs = [
+        _typed_program(REGISTRATION),
+        _typed_program("DER_DISPATCH_INTERFACE-1.1.1"),
+        _typed_program("DER_REGISTRATION_INTERFACE-2.0.0"),
+        _typed_program("DER_DISPATCH_INTERFACE-2.0.0"),
+    ]
+
+    errors = validate_programs_lock_step(programs)
+
+    assert len(errors) == 1
+    assert "1.1.0, 1.1.1" in str(errors[0]["type"])
+    assert "2.0.0" not in str(errors[0]["type"])
+    assert errors[0]["input"] == ["1.1.0", "1.1.1"]
+
+
+def test_a_pre_release_counts_as_its_version_core() -> None:
+    """The x.y.z core is compared, so 1.1.0 and 1.1.0-rc.1 are in lock step."""
+    programs = [_typed_program(REGISTRATION), _typed_program("DER_DISPATCH_INTERFACE-1.1.0-rc.1")]
+
+    assert validate_programs_lock_step(programs) == []
+
+
 def test_lock_step_ignores_programs_of_no_known_kind() -> None:
     """A program the kind check already rejects does not count as a version of its own."""
     programs = [_typed_program(REGISTRATION), _typed_program("DSO_SP_INTERFACE-1.0.0")]

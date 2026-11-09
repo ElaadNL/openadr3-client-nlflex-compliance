@@ -15,6 +15,7 @@ already validated by the base client against ISO 3166-1.
 """
 
 import re
+from collections import defaultdict
 from collections.abc import Sequence
 from enum import StrEnum
 
@@ -210,30 +211,48 @@ def validate_program_nlflex_compliant(program: Program) -> list[InitErrorDetails
 
 def validate_programs_lock_step(programs: Sequence[Program]) -> list[InitErrorDetails]:
     """
-    Validates that the programs are versioned in lock step.
+    Validates that the programs are versioned in lock step, per MAJOR version.
 
     "Profile specification versioning" requires the registration program and every dispatch program to
-    advertise the same {MAJOR}.{MINOR}.{PATCH} version. This is a rule over a set of programs, not over
-    one, so it is not part of the per-program validator and is exported for callers that hold the set.
-    Programs of no known kind are left out: their own validator already reports them.
+    advertise the same {MAJOR}.{MINOR}.{PATCH} version. During the phase out of an old MAJOR version
+    both MAJOR versions are present and the VEN client selects the programs of the MAJOR it implements,
+    so the lock step holds within each MAJOR version, not across them. This is a rule over a set of
+    programs, not over one, so it is not part of the per-program validator and is exported for callers
+    that hold the set. Programs of no known kind are left out: their own validator already reports them.
 
     Args:
-        programs: The programs found on a VTN.
+        programs: The registration and dispatch programs to compare. The registration program and the
+            dispatch programs are currently hosted on separate VTN deployments, so the caller merges the
+            programs read from both.
 
     Returns:
-        One error when the programs advertise more than one version, otherwise an empty list.
+        One error for each MAJOR version whose programs advertise more than one version, otherwise an
+        empty list.
 
     """
-    versions = {version for program in programs if (version := program_version(program)) is not None}
-
-    if len(versions) <= 1:
-        return []
+    versions_by_major: dict[int, set[str]] = defaultdict(set)
+    for program in programs:
+        version = program_version(program)
+        if version is not None:
+            versions_by_major[_version_key(version)[0]].add(version)
 
     return [
-        error(
-            "The registration program and every dispatch program must advertise the same version of the "
-            f"profile specification, but these versions were found: {', '.join(sorted(versions))}.",
-            "attributes",
-            sorted(versions),
-        )
+        _lock_step_error(sorted(versions, key=_version_key))
+        for _, versions in sorted(versions_by_major.items())
+        if len(versions) > 1
     ]
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    """Orders x.y.z versions numerically, so 1.10.0 sorts after 1.9.0."""
+    return tuple(int(part) for part in version.split("."))
+
+
+def _lock_step_error(versions: list[str]) -> InitErrorDetails:
+    """Reports the versions advertised within one MAJOR version that are not in lock step."""
+    return error(
+        "The registration program and every dispatch program of one MAJOR version must advertise the same "
+        f"version of the profile specification, but these versions were found: {', '.join(versions)}.",
+        "attributes",
+        versions,
+    )
