@@ -5,6 +5,7 @@
 """Shared building blocks for the OpenADR DER profile specification v1.1.0 compliance validators."""
 
 from decimal import Decimal, InvalidOperation
+from typing import Final
 from uuid import UUID
 
 from pydantic_core import InitErrorDetails, PydanticCustomError
@@ -44,22 +45,23 @@ def error(message: str, loc: str, value: object) -> InitErrorDetails:
 
 
 # --------------------------------------------------------------------------------------------------------------
-# Identifiers: the standardized identifiers of the OpenADR DER profile specification v1.0.0.
+# Identifiers: the standardized identifiers of the OpenADR DER profile specification v1.1.0.
 #
 # The Dutch energy market uses two EAN lengths and this profile keeps them apart. An EAN18 identifies
 # a PCC, the grid connection an asset sits behind, and is carried on a resource. An EAN13 identifies a
-# market party, a DSO or a Service Provider. Both are written as a numeric string, without separators
+# market party, a DSO or an aggregator. Both are written as a numeric string, without separators
 # and without an 'EAN' prefix, and the check digit MUST be valid.
 #
-# Group-IDs and Asset-IDs are neither EANs nor UUIDs. They are assigned by the BL and by the Service
-# Provider respectively and have no format this profile constrains, so they have no validator here.
+# Group-IDs and Asset-IDs are neither EANs nor UUIDs. They are assigned by the BL and by the
+# aggregator respectively and have no format this profile constrains, so they have no validator here.
 #
-# The DSO identifiers are a closed set (see "DSO identifiers"): "Each DSO MUST be identified by its
-# EAN13 code. The following codes MUST be used", followed by six entries. Membership is therefore
-# enforced, not just the EAN13 shape - a well formed EAN13 that names no Dutch DSO is not a DSO_ID.
-# Service Provider identifiers are the opposite case: that section names no table, since a Service
-# Provider obtains its EAN13 by registering as a Congestion Service Provider, so those are validated
-# on shape alone.
+# The operator identifiers are a closed set (see "Operator identifiers"): "Each DSO MUST be
+# identified by its EAN13 code. GOPACS has no EAN13 code and MUST be identified by the string
+# `GOPACS`. The following identifiers MUST be used", followed by seven entries. Membership is
+# therefore enforced, not just the EAN13 shape: a well formed EAN13 that names no Dutch DSO is not a
+# DSO_ID. Aggregator identifiers are the opposite case: "Aggregator identifiers" names no table,
+# since an aggregator obtains its EAN13 by registering as a Congestion Service Provider, so those
+# are validated on shape alone.
 # --------------------------------------------------------------------------------------------------------------
 
 EAN13_LENGTH = 13
@@ -97,7 +99,7 @@ def is_ean13(value: object) -> bool:
     return _is_ean(value, EAN13_LENGTH)
 
 
-# See the "DSO identifiers" table. A seventh DSO joining a future edition of the profile needs this
+# See the "Operator identifiers" table. A seventh DSO joining a future edition of the profile needs this
 # set extended, which is the intended coupling: the table is normative.
 KNOWN_DSO_IDENTIFIERS = frozenset(
     {
@@ -109,6 +111,15 @@ KNOWN_DSO_IDENTIFIERS = frozenset(
         "8716878999996",  # Westland Infra
     }
 )
+
+
+# GOPACS owns the registration program and has no EAN13, so the specification identifies it by name.
+GOPACS_IDENTIFIER: Final = "GOPACS"
+
+
+def is_registration_operator(value: object) -> bool:
+    """Validates that the value is the identifier of GOPACS, the operator of the registration program."""
+    return value == GOPACS_IDENTIFIER
 
 
 def is_dso_identifier(value: object) -> bool:
