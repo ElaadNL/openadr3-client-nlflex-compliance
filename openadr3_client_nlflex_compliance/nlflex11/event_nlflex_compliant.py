@@ -10,7 +10,7 @@ The profile defines four kinds of event, "each identified by the payload types i
 - The reporting anchor event carries no signal at all. It exists so that reports which have no
   originating event still have an eventID to reference.
 - The baseline event communicates the calculated baseline of a resource group.
-- The flex delta override event corrects the flexibility a Service Provider reported.
+- The flex delta override event corrects the flexibility an aggregator reported.
 - The FLEX event calls flexibility from a resource group.
 
 A validator plugin registers exactly one validator per model class, so this module is the single
@@ -50,7 +50,7 @@ from openadr3_client_nlflex_compliance.nlflex11.program_nlflex_compliant import 
 # profile's reports are not a response to a signal from the BL: the registration report, the
 # deregistration report and the operational status report. The BL therefore creates exactly one
 # reporting anchor event per program for them to reference, as specified in "Reporting anchor event"
-# of the OpenADR DER profile specification v1.0.0.
+# of the OpenADR DER profile specification v1.1.0.
 #
 # The anchor event carries no DR signals. It is the "report-only event with VEN-determined intervals"
 # of [OADR3-UG] section 7.5: an event with no intervals of its own, whose reportDescriptors request a
@@ -190,8 +190,8 @@ def validate_reporting_anchor_event_compliant(event: Event) -> list[InitErrorDet
 # --------------------------------------------------------------------------------------------------------------
 # Baseline event.
 #
-# A baseline event communicates the calculated aggregated baseline of a resource group to the Service
-# Provider, as specified in "Baseline event" of the OpenADR DER profile specification v1.0.0. The
+# A baseline event communicates the calculated aggregated baseline of a resource group to the
+# aggregator, as specified in "Baseline event" of the OpenADR DER profile specification v1.1.0. The
 # baseline is split in two: the active part covers the group's NORMAL and ERROR children, the reserved
 # part its PENDING children. Only the active part can be dispatched.
 #
@@ -200,7 +200,7 @@ def validate_reporting_anchor_event_compliant(event: Event) -> list[InitErrorDet
 # Note that this contradicts the unreleased v0.1 draft, which required an event-level intervalPeriod
 # with a duration of P9999Y.
 #
-# The Service Provider answers with a flex delta report (see the flex delta report section of
+# The aggregator answers with a flex delta report (see the flex delta report section of
 # report_nlflex_compliant), which the event asks for through its report descriptors.
 # --------------------------------------------------------------------------------------------------------------
 
@@ -424,8 +424,8 @@ def validate_baseline_event_compliant(event: Event) -> list[InitErrorDetails] | 
 # Flex delta override event.
 #
 # A flex delta override is the BL setting the flexibility of a resource group to a value other than
-# the one the Service Provider reported for it, as specified in "Flex delta override event" of the
-# OpenADR DER profile specification v1.0.0. It carries the corrected values, the identifier of the
+# the one the aggregator reported for it, as specified in "Flex delta override event" of the
+# OpenADR DER profile specification v1.1.0. It carries the corrected values, the identifier of the
 # report it corrects, and a reason per corrected value.
 #
 # The active and the reserved flex delta are evaluated separately, so the BL MAY override one of them
@@ -804,7 +804,7 @@ def _dispatch_report_descriptors_compliant(self: Event) -> list[InitErrorDetails
     if acknowledgments[0].frequency != ACK_DESCRIPTOR_FREQUENCY:
         validation_errors.append(
             error(
-                "The ACK report descriptor must set frequency to 0, so that the VEN acknowledges on retrieval.",
+                "The ACK report descriptor must set frequency to 0, so that the VEN client acknowledges on retrieval.",
                 "report_descriptors",
                 self.report_descriptors,
             )
@@ -1228,7 +1228,7 @@ BASELINE_EVENT_PAYLOAD_TYPES = frozenset({ACTIVE_BASELINE_PAYLOAD_TYPE, RESERVED
 
 
 class EventKind(StrEnum):
-    """The kinds of event the OpenADR DER profile specification v1.0.0 defines."""
+    """The kinds of event the OpenADR DER profile specification v1.1.0 defines."""
 
     REPORTING_ANCHOR = "REPORTING_ANCHOR"
     """The report-only event that gives reports without an originating event an eventID."""
@@ -1237,7 +1237,7 @@ class EventKind(StrEnum):
     """The calculated aggregated baseline of a resource group."""
 
     FLEX_DELTA_OVERRIDE = "FLEX_DELTA_OVERRIDE"
-    """The BL correcting the flexibility a Service Provider reported."""
+    """The BL correcting the flexibility an aggregator reported."""
 
     FLEXIBILITY_DISPATCH = "FLEXIBILITY_DISPATCH"
     """The DSO calling flexibility from a resource group."""
@@ -1344,7 +1344,7 @@ def validate_event_program_ownership(event: Event, program: Program) -> list[Ini
 
 def validate_event_nlflex_compliant(event: Event) -> list[InitErrorDetails] | None:
     """
-    Validates that an event is compliant with the OpenADR DER profile specification v1.0.0.
+    Validates that an event is compliant with the OpenADR DER profile specification v1.1.0.
 
     Dispatches to the applicable object constraints and requirements based on the payload types the
     event carries.

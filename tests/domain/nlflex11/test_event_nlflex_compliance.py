@@ -484,7 +484,7 @@ def test_targets_are_required() -> None:
 
 
 def test_baseline_event_level_interval_period_is_rejected() -> None:
-    """v1.0.0 forbids what the v0.1 draft required: the event's validity has no end."""
+    """v1.1.0 forbids what the v0.1 draft required: the event's validity has no end."""
     event = _create_baseline_event(
         interval_period=IntervalPeriod(start=datetime(2026, 1, 1, tzinfo=UTC), duration=timedelta(days=1))
     )
@@ -496,7 +496,7 @@ def test_baseline_event_level_interval_period_is_rejected() -> None:
 
 
 def test_both_payload_descriptors_are_required() -> None:
-    """A single BASELINE descriptor was the draft's shape; v1.0.0 splits it in two."""
+    """A single BASELINE descriptor was the draft's shape; v1.1.0 splits it in two."""
     errors = validate_baseline_event_compliant(
         _create_baseline_event(
             payload_descriptors=(EventPayloadDescriptor(payload_type=ACTIVE_BASELINE, units=Unit.KW),)
@@ -1206,7 +1206,7 @@ def test_a_window_matching_a_dst_day_is_compliant(day_start: datetime, day_lengt
 
 
 def test_a_window_not_starting_at_local_midnight_is_rejected() -> None:
-    """A window opening at the publication deadline, as in v1.0.0, does not start at local midnight."""
+    """A window opening at the publication deadline, as in the profile, does not start at local midnight."""
     event = _create_dispatch_event(
         interval_period=IntervalPeriod(start=datetime(2026, 1, 2, 7, 0, 0, tzinfo=UTC), duration=WINDOW_DURATION)
     )

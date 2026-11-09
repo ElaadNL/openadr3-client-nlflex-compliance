@@ -5,7 +5,7 @@
 """
 Compliance validator for the resource of the OpenADR DER profile specification v1.1.0.
 
-A resource represents a single registered DER asset of a Service Provider. Its resourceName is the
+A resource represents a single registered DER asset of an aggregator. Its resourceName is the
 Asset-ID, and it MUST NOT be registered to more than one resource group. That last rule is about the
 resource groups rather than the resource, so it cannot be checked from the resource alone.
 
@@ -44,7 +44,7 @@ def _dso_id_attribute_compliant(self: Resource) -> list[InitErrorDetails]:
         return [
             error(
                 "The DSO_ID attribute must be the identifier of the responsible DSO. The profile fixes these: the "
-                "value must be one of the six EAN13 codes in the DSO identifiers table.",
+                "value must be one of the six DSO EAN13 codes in the Operator identifiers table.",
                 "attributes",
                 self.attributes,
             )

@@ -62,7 +62,7 @@ def error(message: str, loc: str, value: object) -> InitErrorDetails:
 # `GOPACS`. The following identifiers MUST be used", followed by seven entries. Membership is
 # therefore enforced, not just the EAN13 shape: a well formed EAN13 that names no Dutch DSO is not a
 # DSO_ID. Aggregator identifiers are the opposite case: "Aggregator identifiers" names no table,
-# since an aggregator obtains its EAN13 by registering as a Congestion Service Provider, so those
+# since an aggregator obtains its EAN13 by registering with the market, so those
 # are validated on shape alone.
 # --------------------------------------------------------------------------------------------------------------
 
@@ -97,7 +97,7 @@ def _is_ean(value: object, length: int) -> bool:
 
 
 def is_ean13(value: object) -> bool:
-    """Validates that the value is the EAN13 code of a market party, such as a DSO or a Service Provider."""
+    """Validates that the value is the EAN13 code of a market party, such as a DSO or an aggregator."""
     return _is_ean(value, EAN13_LENGTH)
 
 
@@ -126,7 +126,7 @@ def is_registration_operator(value: object) -> bool:
 
 def is_dso_identifier(value: object) -> bool:
     """
-    Validates that the value is one of the DSO identifiers the specification names.
+    Validates that the value is one of the DSO identifiers of the "Operator identifiers" table.
 
     The profile fixes the identifier of every Dutch DSO, so an EAN13 outside that table identifies
     no DSO this profile knows, however well formed it is.
@@ -156,7 +156,7 @@ def is_uuid(value: object) -> bool:
 
 
 # --------------------------------------------------------------------------------------------------------------
-# Power values: the power values of the OpenADR DER profile specification v1.0.0.
+# Power values: the power values of the OpenADR DER profile specification v1.1.0.
 #
 # Every power value in the profile is a double in KW carrying at most two decimal places: the payloads
 # of the baseline event, the flexibility dispatch event, the flex delta override event, the flex delta

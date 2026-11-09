@@ -15,7 +15,7 @@ from openadr3_client_nlflex_compliance.nlflex11.resource_nlflex_compliant import
 
 _UNSET: Any = object()
 
-DSO_EAN13 = "8716871000002"  # Liander, from the DSO identifiers table
+DSO_EAN13 = "8716871000002"  # Liander, from the Operator identifiers table
 PCC_EAN18 = "871685900000000127"
 
 
@@ -87,11 +87,11 @@ def test_dso_id_is_required() -> None:
 
 
 def test_the_draft_dso_id_format_is_rejected() -> None:
-    """The v0.1 draft used identifiers such as 'DSB-LIA'. v1.0.0 uses an EAN13."""
+    """The v0.1 draft used identifiers such as 'DSB-LIA'. v1.1.0 uses an EAN13."""
     errors = validate_resource_nlflex_compliant(_create_resource(_replacing("DSO_ID", ("DSB-LIA",))))
 
     assert errors is not None
-    assert any("DSO identifier" in str(error["type"]) for error in errors)
+    assert any("Operator identifiers table" in str(error["type"]) for error in errors)
 
 
 def test_ean_is_required() -> None:
@@ -103,7 +103,7 @@ def test_ean_is_required() -> None:
 
 
 def test_an_ean18_with_an_invalid_check_digit_is_rejected() -> None:
-    """The draft accepted any 18 digits. v1.0.0 requires a valid check digit."""
+    """The draft accepted any 18 digits. v1.1.0 requires a valid check digit."""
     errors = validate_resource_nlflex_compliant(_create_resource(_replacing("EAN", ("871685900000000128",))))
 
     assert errors is not None
@@ -205,4 +205,4 @@ def test_a_valid_ean13_that_names_no_dso_is_rejected_as_dso_id() -> None:
     errors = validate_resource_nlflex_compliant(_create_resource(_replacing("DSO_ID", ("8712345678906",))))
 
     assert errors is not None
-    assert any("DSO identifiers table" in str(error["type"]) for error in errors)
+    assert any("Operator identifiers table" in str(error["type"]) for error in errors)

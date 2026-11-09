@@ -18,7 +18,7 @@ from openadr3_client_nlflex_compliance.nlflex11.resource_group_nlflex_compliant 
 
 _UNSET: Any = object()
 
-DSO_EAN13 = "8716871000002"  # Liander, from the DSO identifiers table
+DSO_EAN13 = "8716871000002"  # Liander, from the Operator identifiers table
 SERVICE_PROVIDER_EAN13 = "8712345678906"
 
 COMPUTED_ATTRIBUTE_TYPES = (
@@ -107,15 +107,15 @@ def test_dso_id_is_required() -> None:
 
 
 def test_the_draft_dso_id_format_is_rejected() -> None:
-    """The v0.1 draft used identifiers such as 'DSB-LIA'. v1.0.0 uses an EAN13."""
+    """The v0.1 draft used identifiers such as 'DSB-LIA'. v1.1.0 uses an EAN13."""
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(_replacing("DSO_ID", ("DSB-LIA",))))
 
     assert errors is not None
-    assert any("DSO identifier" in str(error["type"]) for error in errors)
+    assert any("Operator identifiers table" in str(error["type"]) for error in errors)
 
 
 def test_service_provider_id_is_required() -> None:
-    """The group names the Service Provider whose assets it holds."""
+    """The group names the aggregator whose assets it holds."""
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(_without("SERVICE_PROVIDER_ID")))
 
     assert errors is not None
@@ -123,13 +123,13 @@ def test_service_provider_id_is_required() -> None:
 
 
 def test_the_draft_service_provider_id_format_is_rejected() -> None:
-    """The v0.1 draft used identifiers such as 'SP-ZON'. v1.0.0 uses an EAN13."""
+    """The v0.1 draft used identifiers such as 'SP-ZON'. v1.1.0 uses an EAN13."""
     errors = validate_resource_group_nlflex_compliant(
         _create_resource_group(_replacing("SERVICE_PROVIDER_ID", ("SP-ZON",)))
     )
 
     assert errors is not None
-    assert any("Service Provider identifier" in str(error["type"]) for error in errors)
+    assert any("aggregator identifier" in str(error["type"]) for error in errors)
 
 
 def test_congestion_point_id_is_required() -> None:
@@ -165,7 +165,7 @@ def test_every_allowed_max_duration_is_accepted(max_duration: str) -> None:
 
 
 def test_an_unsupported_max_duration_is_rejected() -> None:
-    """PT1H is the length of an adjacent hour, not an availability duration."""
+    """PT1H is the length of one hour around a reduction, not an availability duration."""
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(_replacing("MAX_DURATION", ("PT1H",))))
 
     assert errors is not None
@@ -219,7 +219,7 @@ def test_an_evse_baseline_override_is_validated_when_present() -> None:
 
 
 def test_a_non_numeric_evse_baseline_override_is_rejected() -> None:
-    """It is absent when the Service Provider has not requested a correction, never a string."""
+    """It is absent when the aggregator has not requested a correction, never a string."""
     attributes = [*_default_valid_attributes(), Attribute(type="EVSE_BASELINE_OVERRIDE", values=("11.5",))]
 
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(attributes))
@@ -287,4 +287,4 @@ def test_a_valid_ean13_that_names_no_dso_is_rejected_as_dso_id() -> None:
     errors = validate_resource_group_nlflex_compliant(_create_resource_group(_replacing("DSO_ID", ("8712345678906",))))
 
     assert errors is not None
-    assert any("DSO identifiers table" in str(error["type"]) for error in errors)
+    assert any("Operator identifiers table" in str(error["type"]) for error in errors)

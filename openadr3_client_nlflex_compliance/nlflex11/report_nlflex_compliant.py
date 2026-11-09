@@ -81,7 +81,7 @@ def single_aggregated_report_resource(
 # --------------------------------------------------------------------------------------------------------------
 # Registration and deregistration report.
 #
-# Registration is the process by which a Service Provider's assets become members of a resource group,
+# Registration is the process by which an aggregator's assets become members of a resource group,
 # and deregistration is the reverse, as specified in "Resource group registration and deregistration"
 # of the OpenADR DER profile specification v1.1.0.
 #
@@ -222,9 +222,9 @@ def _request_payload_compliant(self: Report, payload: object) -> list[InitErrorD
 # Both are at most zero. Zero means no flexibility is offered, so the dispatch limit equals the
 # ACTIVE_BASELINE; the more negative the value, the more the group offers.
 #
-# Two rules of the chapter are about sequence rather than shape
-# and cannot be checked from a single object: the report references the baseline event that requested
-# it, and the most recent report for a group is the group's offer.
+# Two rules of the chapter are about sequence rather than shape and cannot be checked from a single
+# object: the report references the baseline event that requested it, and the most recent report for a
+# group is the group's offer.
 # --------------------------------------------------------------------------------------------------------------
 
 FLEX_DELTA_PAYLOAD_TYPES = (ACTIVE_FLEX_DELTA_PAYLOAD_TYPE, RESERVED_FLEX_DELTA_PAYLOAD_TYPE)
@@ -317,11 +317,9 @@ def validate_flex_delta_report_compliant(report: Report) -> list[InitErrorDetail
 # - The delivery report ("Flexibility delivery reporting") states what the resource group actually
 #   delivered, per 15 minutes, once every interval of the event has transpired.
 #
-# Both are specified in the OpenADR DER profile specification v1.1.0. Neither exists in the v0.1
-# draft, and `nlflex01` actively mis-validates them: its report dispatcher routes any report whose
-# reportName is not RESOURCE_REGISTRATION or OPERATIONAL_STATUS into the flex delta validator, which
-# demands exactly one FLEX_DELTA payload per interval. That produces errors naming a rule the report
-# was never subject to.
+# Both are specified in the OpenADR DER profile specification v1.1.0. The report dispatcher tells the
+# kinds of report apart by the payload types they carry (ACK for the acknowledgment, DELIVERED_FLEX for
+# the delivery report), never by reportName, which is optional.
 #
 # The two validators are exported separately as well as behind the dispatcher, so a caller that knows
 # which report it asked for can use them directly. One rule is not checkable from the report alone:
@@ -333,9 +331,6 @@ def validate_flex_delta_report_compliant(report: Report) -> list[InitErrorDetail
 
 ACK_PAYLOAD_TYPE = ReportPayloadType("ACK")
 DELIVERED_FLEX_PAYLOAD_TYPE = ReportPayloadType("DELIVERED_FLEX")
-
-# A DELIVERED_FLEX payload carries one value per 15 minutes of the interval it belongs to: 4 values
-# for PT1H, 8 for PT2H, 16 for PT4H and 24 for PT6H.
 
 
 # `eventID` is not validated here: the OpenADR Report model already requires it, so a report that
@@ -735,13 +730,13 @@ def _client_name_compliant(report: Report) -> list[InitErrorDetails]:
     Validates the clientName, which every report shape shares.
 
     The clientName MUST be the venName of the VEN submitting the report, and a venName MUST be the
-    Service Provider identifier, which is an EAN13.
+    aggregator identifier, which is an EAN13.
     """
     if not is_ean13(report.client_name):
         return [
             error(
-                "The report clientName must be the venName of the VEN submitting it, which is the Service "
-                "Provider identifier: an EAN13 of 13 digits with a valid check digit.",
+                "The report clientName must be the venName of the VEN submitting it, which is the aggregator "
+                "identifier: an EAN13 of 13 digits with a valid check digit.",
                 "client_name",
                 report.client_name,
             )

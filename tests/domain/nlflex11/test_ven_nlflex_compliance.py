@@ -23,11 +23,11 @@ def test_a_ven_without_targets_is_valid() -> None:
 
 
 def test_the_draft_identifier_format_is_rejected() -> None:
-    """The v0.1 draft used identifiers such as 'SP-ZON'. v1.0.0 uses an EAN13."""
+    """The v0.1 draft used identifiers such as 'SP-ZON'. v1.1.0 uses an EAN13."""
     errors = validate_ven_nlflex_compliant(_create_ven("SP-ZON"))
 
     assert errors is not None
-    assert any("Service Provider identifier" in str(error["type"]) for error in errors)
+    assert any("aggregator identifier" in str(error["type"]) for error in errors)
 
 
 def test_an_invalid_check_digit_is_rejected() -> None:
@@ -35,4 +35,4 @@ def test_an_invalid_check_digit_is_rejected() -> None:
     errors = validate_ven_nlflex_compliant(_create_ven("8712345678900"))
 
     assert errors is not None
-    assert any("Service Provider identifier" in str(error["type"]) for error in errors)
+    assert any("aggregator identifier" in str(error["type"]) for error in errors)

@@ -6,14 +6,18 @@
 Raw-input checks for "Timestamps and durations" of the DER profile v1.1.0.
 
 Plugin validators run on the parsed pydantic model, where "P1D" and "PT24H" are the same timedelta and
-"Z" and "+01:00" the same instant. The two rules below can therefore only be checked on the raw JSON,
-before it is parsed. Callers run these functions on the raw dict before parsing, and raise the result with
-ValidationError.from_exception_data or report it. They are deliberately not registered in the plugin.
+both "Z" and "+01:00" notations are accepted and normalised to aware datetimes. The two rules below can
+therefore only be checked on the raw JSON, before it is parsed. Callers run these functions on the raw
+dict before parsing, and raise the result with ValidationError.from_exception_data or report it. They are
+deliberately not registered in the plugin.
 
 Field names are camelCase, as the VTN returns them. Absent and null values are skipped. Otherwise a
 timestamp must be an RFC 3339 string and a duration an ISO 8601 string, as OpenADR 3.1 defines both: the
 parser also accepts plain numbers (Unix epoch seconds, a number of seconds) and other shapes, so those are
 rejected here.
+
+A non-list intervals or resources, or a non-mapping intervalPeriod, is skipped here because the parser
+reports shape errors itself.
 
 Only literal MUST and MUST NOT rules are enforced. Milliseconds are a SHOULD and are not checked.
 """
