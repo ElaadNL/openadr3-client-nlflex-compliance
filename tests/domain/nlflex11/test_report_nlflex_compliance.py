@@ -229,7 +229,7 @@ def test_an_unrecognised_report_shape_is_reported_as_such() -> None:
 
 
 def test_client_name_must_be_the_service_provider_ean13() -> None:
-    """The clientName MUST be the VEN's venName, which MUST be the Service Provider EAN13."""
+    """The clientName MUST be the VEN's venName, which MUST be the aggregator EAN13."""
     report = NewReport(
         eventID="a0000000-0000-4000-8000-000000000000",
         client_name="elaad-client",
@@ -434,7 +434,7 @@ def test_the_group_payload_is_required() -> None:
 
 
 def test_the_draft_group_payload_type_is_rejected() -> None:
-    """The v0.1 draft named this payload RESOURCE_GROUP_TARGET. v1.0.0 renamed it."""
+    """The v0.1 draft named this payload RESOURCE_GROUP_TARGET. v1.1.0 renamed it."""
     payloads = (
         ReportPayload(type=ReportPayloadType("RESOURCE_GROUP_TARGET"), values=(GROUP_OBJECT_ID,)),
         ReportPayload(type=REGISTRATION_REQUEST, values=(FIRST_ASSET_ID,)),
@@ -624,7 +624,7 @@ def test_flex_delta_exactly_one_interval_with_id_zero() -> None:
 
 
 def test_the_draft_payload_type_is_rejected() -> None:
-    """The v0.1 draft carried one FLEX_DELTA payload. v1.0.0 splits it in two."""
+    """The v0.1 draft carried one FLEX_DELTA payload. v1.1.0 splits it in two."""
     payloads = (ReportPayload(type=ReportPayloadType("FLEX_DELTA"), values=(-300,)),)
 
     errors = validate_flex_delta_report_compliant(_create_flex_delta_report(payloads=payloads))

@@ -40,7 +40,7 @@ def test_a_dso_is_not_the_registration_operator() -> None:
 # --- Identifiers (EAN13, EAN18, UUID) ---------------------------------------------------------
 
 # The six DSO identifiers of the "Operator identifiers" table, plus the two fictional EAN13 codes the
-# specification's examples use for a DSO and a Service Provider.
+# specification's examples use for a DSO and an aggregator.
 SPEC_EAN13_IDENTIFIERS = (
     "8716916000004",
     "8712423014022",
@@ -75,7 +75,7 @@ def test_ean18_rejects_an_invalid_check_digit() -> None:
 
 
 def test_ean13_rejects_the_draft_identifier_format() -> None:
-    """The v0.1 draft used identifiers such as 'DSB-LIA'. v1.0.0 uses EAN13 codes."""
+    """The v0.1 draft used identifiers such as 'DSB-LIA'. v1.1.0 uses EAN13 codes."""
     assert not is_ean13("DSB-LIA")
 
 

@@ -142,7 +142,9 @@ def _retailer_name_attribute_compliant(program: Program, kind: ProgramKind) -> l
         )
     else:
         is_operator = is_dso_identifier
-        expectation = "the identifier of the issuing DSO: one of the six EAN13 codes in the Operator identifiers table"
+        expectation = (
+            "the identifier of the issuing DSO: one of the six DSO EAN13 codes in the Operator identifiers table"
+        )
 
     if len(values) != 1 or not is_operator(values[0]):
         return [

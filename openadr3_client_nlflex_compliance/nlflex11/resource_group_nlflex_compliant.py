@@ -5,7 +5,7 @@
 """
 Compliance validator for the resource group of the OpenADR DER profile specification v1.1.0.
 
-A resource group models the combination of a set of DERs, a Service Provider, a DSO and a congestion
+A resource group models the combination of a set of DERs, an aggregator, a DSO and a congestion
 point. It is the target of a baseline event and the subject of flex delta reports. Its
 resourceGroupName is the Group-ID.
 
@@ -79,7 +79,7 @@ def _dso_id_attribute_compliant(self: ResourceGroup) -> list[InitErrorDetails]:
         return [
             error(
                 "The DSO_ID attribute must be the identifier of the responsible DSO. The profile fixes these: the "
-                "value must be one of the six EAN13 codes in the DSO identifiers table.",
+                "value must be one of the six DSO EAN13 codes in the Operator identifiers table.",
                 "attributes",
                 self.attributes,
             )
@@ -89,7 +89,7 @@ def _dso_id_attribute_compliant(self: ResourceGroup) -> list[InitErrorDetails]:
 
 
 def _service_provider_id_attribute_compliant(self: ResourceGroup) -> list[InitErrorDetails]:
-    """Validates that the group names the Service Provider whose assets it holds, by its EAN13."""
+    """Validates that the group names the aggregator whose assets it holds, by its EAN13."""
     service_provider_id = self.attributes.get_by_type(SERVICE_PROVIDER_ID_ATTRIBUTE) if self.attributes else None
 
     if service_provider_id is None:
@@ -98,7 +98,7 @@ def _service_provider_id_attribute_compliant(self: ResourceGroup) -> list[InitEr
     if not service_provider_id.values or not all(is_ean13(value) for value in service_provider_id.values):
         return [
             error(
-                "The SERVICE_PROVIDER_ID attribute must be the Service Provider identifier, which is an EAN13 "
+                "The SERVICE_PROVIDER_ID attribute must be the aggregator identifier, which is an EAN13 "
                 "of 13 digits with a valid check digit (for example '8712345678906').",
                 "attributes",
                 self.attributes,
@@ -158,7 +158,7 @@ def _evse_baseline_override_attribute_compliant(self: ResourceGroup) -> list[Ini
     """
     Validates the per-asset EVSE baseline override, when present.
 
-    The override is requested by the Service Provider out of band and persisted by the BL, and is
+    The override is requested by the aggregator out of band and persisted by the BL, and is
     absent when no correction was requested.
     """
     override = self.attributes.get_by_type(EVSE_BASELINE_OVERRIDE_ATTRIBUTE) if self.attributes else None
@@ -264,7 +264,7 @@ def _children_compliant(self: ResourceGroup) -> list[InitErrorDetails]:
 
 def validate_resource_group_nlflex_compliant(resource_group: ResourceGroup) -> list[InitErrorDetails] | None:
     """
-    Validates that a resource group is compliant with the OpenADR DER profile specification v1.0.0.
+    Validates that a resource group is compliant with the OpenADR DER profile specification v1.1.0.
 
     Args:
         resource_group: The resource group to validate.

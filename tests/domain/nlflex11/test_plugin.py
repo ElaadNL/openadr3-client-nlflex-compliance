@@ -29,15 +29,16 @@ from openadr3_client.oadr310.models.ven.ven import NewVenBlRequest
 from openadr3_client.plugin import ValidatorPluginRegistry
 from pydantic import ValidationError
 
+from openadr3_client_nlflex_compliance import nlflex11
 from openadr3_client_nlflex_compliance.nlflex11.plugin import Nlflex11ValidatorPlugin
 
 SERVICE_PROVIDER_EAN13 = "8712345678906"
-DSO_EAN13 = "8716871000002"  # Liander, from the DSO identifiers table
+DSO_EAN13 = "8716871000002"  # Liander, from the Operator identifiers table
 
 
 @pytest.fixture(autouse=True)
 def clear_plugins():
-    """Clear plugins before each test and register the v1.0.0 plugin."""
+    """Clear plugins before each test and register the v1.1.0 plugin."""
     ValidatorPluginRegistry.clear_plugins()
     ValidatorPluginRegistry.register_plugin(Nlflex11ValidatorPlugin.setup())
     yield
@@ -50,6 +51,29 @@ def test_exactly_one_validator_is_registered_per_model() -> None:
         assert len(ValidatorPluginRegistry.get_model_validators(model)) == 1
 
 
+def test_cross_object_and_raw_input_functions_are_exported_but_not_registered() -> None:
+    """They need a second object or the raw JSON, which a model validator never sees."""
+    exported = (
+        nlflex11.validate_programs_lock_step,
+        nlflex11.validate_event_program_ownership,
+        nlflex11.validate_raw_event,
+        nlflex11.validate_raw_program,
+        nlflex11.validate_raw_report,
+        nlflex11.validate_raw_ven,
+        nlflex11.validate_raw_resource,
+        nlflex11.validate_raw_resource_group,
+    )
+    registered = {
+        info.func
+        for model in (NewEvent, NewReport, NewProgram, NewVenBlRequest, NewResourceBlRequest, NewResourceGroup)
+        for info in ValidatorPluginRegistry.get_model_validators(model)
+    }
+
+    assert all(callable(function) for function in exported)
+    assert registered.isdisjoint(exported)
+    assert set(exported) <= {getattr(nlflex11, name) for name in nlflex11.__all__}
+
+
 def test_a_compliant_ven_is_accepted() -> None:
     """Registering the plugin does not break the construction of a compliant object."""
     ven = NewVenBlRequest(ven_name=SERVICE_PROVIDER_EAN13, clientID="elaad-client", targets=("GROUP-0001",))
@@ -59,7 +83,7 @@ def test_a_compliant_ven_is_accepted() -> None:
 
 def test_a_non_compliant_ven_is_rejected_on_construction() -> None:
     """The plugin runs as a pydantic model validator, so a bad object cannot be built."""
-    with pytest.raises(ValidationError, match=re.escape("Service Provider identifier")):
+    with pytest.raises(ValidationError, match=re.escape("aggregator identifier")):
         NewVenBlRequest(ven_name="SP-ZON", clientID="elaad-client")
 
 
