@@ -82,7 +82,7 @@ def _acknowledgment_report() -> NewReport:
 
 
 def _delivery_report() -> NewReport:
-    """Helper function to create a compliant delivery report for one adjacent hour."""
+    """Helper function to create a compliant delivery report for one interval."""
     return _report(
         report_name=None,
         resources=(
@@ -121,14 +121,49 @@ def _operational_status_report() -> NewReport:
     )
 
 
-def test_the_registration_report_is_recognised() -> None:
-    """Discriminated by its reportName."""
-    assert report_kind(_registration_report()) is ReportKind.RESOURCE_REGISTRATION
+@pytest.mark.parametrize("name", [None, "Resource-Registration", "anything"])
+def test_a_registration_report_is_recognised_whatever_its_report_name(name: str | None) -> None:
+    """Discriminated by its payload types alone."""
+    report = _report(report_name=name, resources=_registration_report().resources)
+
+    assert report_kind(report) is ReportKind.RESOURCE_REGISTRATION
 
 
-def test_the_operational_status_report_is_recognised() -> None:
-    """Discriminated by its reportName."""
-    assert report_kind(_operational_status_report()) is ReportKind.OPERATIONAL_STATUS
+def test_a_deregistration_report_is_recognised() -> None:
+    """DE_REGISTRATION_REQUEST marks the registration kind as well."""
+    report = _report(
+        report_name=None,
+        resources=_aggregated(
+            ReportPayload(type=ReportPayloadType("RESOURCE_GROUP_ID"), values=(GROUP_OBJECT_ID,)),
+            ReportPayload(type=ReportPayloadType("DE_REGISTRATION_REQUEST"), values=(ASSET_OBJECT_ID,)),
+        ),
+    )
+
+    assert report_kind(report) is ReportKind.RESOURCE_REGISTRATION
+
+
+@pytest.mark.parametrize("name", [None, "Operational-Status"])
+def test_an_operational_status_report_is_recognised_whatever_its_report_name(name: str | None) -> None:
+    """Discriminated by its payload types alone."""
+    report = _report(report_name=name, resources=_operational_status_report().resources)
+
+    assert report_kind(report) is ReportKind.OPERATIONAL_STATUS
+
+
+def test_an_acknowledgment_without_report_name_is_compliant() -> None:
+    """The reportName is MAY on every report kind."""
+    assert _acknowledgment_report().report_name is None
+    assert validate_report_nlflex_compliant(_acknowledgment_report()) is None
+
+
+def test_a_report_with_no_known_payload_type_matches_no_kind() -> None:
+    """Without a reportName to fall back on, an unknown payload type leaves the kind undecided."""
+    report = _report(
+        report_name="OPERATIONAL_STATUS",
+        resources=_aggregated(ReportPayload(type=ReportPayloadType.READING, values=(10,))),
+    )
+
+    assert report_kind(report) is None
 
 
 def test_the_flex_delta_report_is_recognised() -> None:
@@ -348,12 +383,10 @@ def test_deregistration_report_valid() -> None:
     assert validate_registration_report_compliant(_create_registration_report(payloads=payloads)) is None
 
 
-def test_report_name_must_be_resource_registration() -> None:
-    """Both operations use the RESOURCE_REGISTRATION report name."""
-    errors = validate_registration_report_compliant(_create_registration_report(report_name="REGISTRATION"))
-
-    assert errors is not None
-    assert any("'RESOURCE_REGISTRATION'" in str(error["type"]) for error in errors)
+@pytest.mark.parametrize("name", [None, "anything"])
+def test_a_registration_report_validates_whatever_its_report_name(name: str | None) -> None:
+    """The reportName is optional, so the registration validator does not inspect it."""
+    assert validate_registration_report_compliant(_create_registration_report(report_name=name)) is None
 
 
 def test_registration_a_per_asset_resource_entry_is_rejected() -> None:
@@ -894,7 +927,7 @@ def test_delivery_report_payload_type_must_be_delivered_flex() -> None:
 
 
 def test_delivery_report_mirrors_every_event_interval() -> None:
-    """One report interval per event interval, adjacent hours included."""
+    """One report interval per event interval."""
     intervals = (_delivery_interval(1, DISPATCH_START, timedelta(hours=4), 200),)
 
     errors = validate_flex_delivery_report_compliant(
@@ -1021,12 +1054,10 @@ def test_one_entry_per_resource_being_reported_on() -> None:
     assert validate_operational_status_report_compliant(report) is None
 
 
-def test_report_name_must_be_operational_status() -> None:
-    """The report is discriminated by its reportName."""
-    errors = validate_operational_status_report_compliant(_create_operational_status_report(report_name="STATUS"))
-
-    assert errors is not None
-    assert any("'OPERATIONAL_STATUS'" in str(error["type"]) for error in errors)
+@pytest.mark.parametrize("name", [None, "STATUS"])
+def test_an_operational_status_report_validates_whatever_its_report_name(name: str | None) -> None:
+    """The reportName is optional, so the operational status validator does not inspect it."""
+    assert validate_operational_status_report_compliant(_create_operational_status_report(report_name=name)) is None
 
 
 def test_operational_status_exactly_one_interval_with_id_zero() -> None:
