@@ -4,6 +4,7 @@
 
 from typing import Any
 
+import pytest
 from openadr3_client._models.common.attribute import Attribute
 from openadr3_client._models.common.value_map_collection import ValuesMap
 from openadr3_client.oadr310.models.program.program import NewProgram
@@ -103,7 +104,7 @@ def test_program_type_is_required() -> None:
     """A program without PROGRAM_TYPE has no kind, and the error names both accepted formats."""
     messages = _messages(_create_program(_without(_registration_attributes(), "PROGRAM_TYPE")))
 
-    assert any("DER_REGISTRATION_INTERFACE-x.y.z" in m and "DER_DISPATCH_INTERFACE-x.y.z" in m for m in messages)
+    assert any("DER_REGISTRATION_INTERFACE-1.1.z" in m and "DER_DISPATCH_INTERFACE-1.1.z" in m for m in messages)
 
 
 def test_a_v1_0_0_program_type_is_rejected() -> None:
@@ -111,8 +112,8 @@ def test_a_v1_0_0_program_type_is_rejected() -> None:
     messages = _messages(_typed_program("DSO_SP_INTERFACE-1.0.0"))
 
     assert len(messages) == 1
-    assert "DER_REGISTRATION_INTERFACE-x.y.z" in messages[0]
-    assert "DER_DISPATCH_INTERFACE-x.y.z" in messages[0]
+    assert "DER_REGISTRATION_INTERFACE-1.1.z" in messages[0]
+    assert "DER_DISPATCH_INTERFACE-1.1.z" in messages[0]
 
 
 def test_a_program_type_without_a_prefix_is_rejected() -> None:
@@ -209,9 +210,47 @@ def test_program_kind_and_version_follow_program_type() -> None:
     """The kind and the x.y.z core are read from PROGRAM_TYPE; pre-release and build suffixes are not part of it."""
     assert program_kind(_typed_program(REGISTRATION)) is ProgramKind.REGISTRATION
     assert program_kind(_typed_program(DISPATCH)) is ProgramKind.DISPATCH
-    assert program_version(_typed_program("DER_DISPATCH_INTERFACE-2.3.4-rc.1+build.5")) == "2.3.4"
+    assert program_version(_typed_program("DER_DISPATCH_INTERFACE-1.1.4-rc.1+build.5")) == "1.1.4"
     assert program_kind(_typed_program("DSO_SP_INTERFACE-1.0.0")) is None
     assert program_version(_typed_program("DSO_SP_INTERFACE-1.0.0")) is None
+
+
+@pytest.mark.parametrize("prefix", ["DER_REGISTRATION_INTERFACE", "DER_DISPATCH_INTERFACE"])
+@pytest.mark.parametrize(
+    "version", ["1.0.0", "1.2.0", "2.0.0", "1.10.0", "1.1", "1.1.01", "1.1.0-", "1.1.0-rc.01", "11.1.0"]
+)
+def test_a_program_of_another_version_is_rejected(prefix: str, version: str) -> None:
+    """PROGRAM_TYPE carries the version of this specification, so only 1.1.z is accepted."""
+    program = _typed_program(f"{prefix}-{version}")
+
+    messages = _messages(program)
+
+    assert program_kind(program) is None
+    assert len(messages) == 1
+    assert "1.1.z" in messages[0]
+
+
+@pytest.mark.parametrize("prefix", ["DER_REGISTRATION_INTERFACE", "DER_DISPATCH_INTERFACE"])
+@pytest.mark.parametrize(
+    "version",
+    [
+        "1.1.0",
+        "1.1.1",
+        "1.1.12",
+        "1.1.0-rc.1",
+        "1.1.0-alpha",
+        "1.1.0-alpha.1",
+        "1.1.0-0.3.7",
+        "1.1.0+build.5",
+        "1.1.2-beta+exp.sha.5114f85",
+    ],
+)
+def test_a_patch_pre_release_or_build_of_1_1_is_accepted(prefix: str, version: str) -> None:
+    """A patch, pre-release or build of 1.1 is still version 1.1 of the specification."""
+    program = _typed_program(f"{prefix}-{version}")
+
+    assert program_kind(program) is not None
+    assert validate_program_nlflex_compliant(program) is None
 
 
 def test_programs_on_one_version_are_in_lock_step() -> None:
@@ -221,47 +260,26 @@ def test_programs_on_one_version_are_in_lock_step() -> None:
     assert validate_programs_lock_step(programs) == []
 
 
-def test_programs_on_two_versions_are_not_in_lock_step() -> None:
-    """One error is reported however many programs disagree."""
+def test_programs_on_two_patch_versions_are_not_in_lock_step() -> None:
+    """Both programs pass on their own, but a registration program on 1.1.0 and a dispatch program on 1.1.1 differ."""
     programs = [
         _typed_program(REGISTRATION),
         _typed_program(DISPATCH),
         _typed_program("DER_DISPATCH_INTERFACE-1.1.1"),
-    ]
-
-    errors = validate_programs_lock_step(programs)
-
-    assert len(errors) == 1
-    assert "same version" in str(errors[0]["type"])
-
-
-def test_two_majors_each_in_lock_step_pass() -> None:
-    """During a MAJOR phase-out both MAJOR versions are present, each in lock step on its own."""
-    programs = [
-        _typed_program(REGISTRATION),
-        _typed_program(DISPATCH),
-        _typed_program("DER_REGISTRATION_INTERFACE-2.0.0"),
-        _typed_program("DER_DISPATCH_INTERFACE-2.0.0"),
-    ]
-
-    assert validate_programs_lock_step(programs) == []
-
-
-def test_only_the_major_out_of_lock_step_is_reported() -> None:
-    """A MAJOR with two versions gets an error naming only its own versions, the other MAJOR stays clean."""
-    programs = [
-        _typed_program(REGISTRATION),
-        _typed_program("DER_DISPATCH_INTERFACE-1.1.1"),
-        _typed_program("DER_REGISTRATION_INTERFACE-2.0.0"),
-        _typed_program("DER_DISPATCH_INTERFACE-2.0.0"),
     ]
 
     errors = validate_programs_lock_step(programs)
 
     assert len(errors) == 1
     assert "1.1.0, 1.1.1" in str(errors[0]["type"])
-    assert "2.0.0" not in str(errors[0]["type"])
     assert errors[0]["input"] == ["1.1.0", "1.1.1"]
+
+
+def test_patch_versions_are_ordered_numerically() -> None:
+    """1.1.10 sorts after 1.1.9, not before it."""
+    programs = [_typed_program("DER_REGISTRATION_INTERFACE-1.1.10"), _typed_program("DER_DISPATCH_INTERFACE-1.1.9")]
+
+    assert validate_programs_lock_step(programs)[0]["input"] == ["1.1.9", "1.1.10"]
 
 
 def test_a_pre_release_counts_as_its_version_core() -> None:
@@ -273,6 +291,6 @@ def test_a_pre_release_counts_as_its_version_core() -> None:
 
 def test_lock_step_ignores_programs_of_no_known_kind() -> None:
     """A program the kind check already rejects does not count as a version of its own."""
-    programs = [_typed_program(REGISTRATION), _typed_program("DSO_SP_INTERFACE-1.0.0")]
+    programs = [_typed_program(REGISTRATION), _typed_program("DER_DISPATCH_INTERFACE-2.0.0")]
 
     assert validate_programs_lock_step(programs) == []

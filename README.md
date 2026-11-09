@@ -54,6 +54,8 @@ if errors:
 
 ### Checks across objects (nlflex11)
 
+A program must advertise version 1.1.z in its PROGRAM_TYPE (`DER_REGISTRATION_INTERFACE-1.1.z` or `DER_DISPATCH_INTERFACE-1.1.z`). Any patch, and a pre-release or build of it such as `1.1.0-rc.1`, is accepted; a later minor or major version is not. Because patches are accepted, the registration program and a dispatch program can each pass on their own while advertising different patch versions, which the lock step below catches.
+
 The plugin sees one object at a time, so rules that compare objects are not registered. A caller that holds both objects runs them itself:
 
 - `validate_event_program_ownership(event, program)` checks that an event lives in the kind of program that owns its kind of event (registration or dispatch).
