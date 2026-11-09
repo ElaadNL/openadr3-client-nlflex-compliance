@@ -20,10 +20,12 @@ Registering the plugin is done using the global ValidatorPluginRegistry class:
 
 ```python
 from openadr3_client.plugin import ValidatorPluginRegistry
-from openadr3_client_nlflex_compliance.nlflex10.plugin import Nlflex10ValidatorPlugin
+from openadr3_client_nlflex_compliance.nlflex11.plugin import Nlflex11ValidatorPlugin
 
-ValidatorPluginRegistry.register_plugin(Nlflex10ValidatorPlugin.setup())
+ValidatorPluginRegistry.register_plugin(Nlflex11ValidatorPlugin.setup())
 ```
+
+`Nlflex10ValidatorPlugin` from `openadr3_client_nlflex_compliance.nlflex10.plugin` is registered the same way.
 
 ## Version support
 
@@ -31,8 +33,6 @@ The package provides a validator implementation per version of the profile speci
 
 - **Nlflex11ValidatorPlugin** (`nlflex11`): OpenADR DER profile specification v1.1.0
 - **Nlflex10ValidatorPlugin** (`nlflex10`): OpenADR DER profile specification v1.0.0
-
-The specification each plugin validates against ships in the `spec/` directory of this repository, together with the worked message examples the test suite validates against.
 
 Register the plugin for the version of the specification you implement. An earlier plugin, `Nlflex01ValidatorPlugin`, validated the unreleased NL-Flex v0.1 draft and has been removed: the released v1.0.0 contradicts that draft on several rules rather than only extending it.
 
@@ -52,14 +52,16 @@ if errors:
 
 `validate_raw_program`, `validate_raw_report`, `validate_raw_ven`, `validate_raw_resource` and `validate_raw_resource_group` work the same way. They are deliberately not registered in the plugin.
 
-### Checks across objects (nlflex11)
+### Accepted versions (nlflex11)
 
-A program must advertise version 1.1.z in its PROGRAM_TYPE (`DER_REGISTRATION_INTERFACE-1.1.z` or `DER_DISPATCH_INTERFACE-1.1.z`). Any patch, and a pre-release or build of it such as `1.1.0-rc.1`, is accepted; a later minor or major version is not. Because patches are accepted, the registration program and a dispatch program can each pass on their own while advertising different patch versions, which the lock step below catches.
+A program must advertise version 1.1.z in its PROGRAM_TYPE (`DER_REGISTRATION_INTERFACE-1.1.z` or `DER_DISPATCH_INTERFACE-1.1.z`). Any patch, and a pre-release or build of it such as `1.1.0-rc.1`, is accepted; a later minor or major version is not. Because patches are accepted, the registration program and a dispatch program can each pass on their own while advertising different patch versions, which `validate_programs_lock_step` below catches.
+
+### Checks across objects (nlflex11)
 
 The plugin sees one object at a time, so rules that compare objects are not registered. A caller that holds both objects runs them itself:
 
 - `validate_event_program_ownership(event, program)` checks that an event lives in the kind of program that owns its kind of event (registration or dispatch).
-- `validate_programs_lock_step(programs)` checks that the registration program and every dispatch program advertise the same profile version, within each MAJOR version. During a phase out both MAJOR versions are present, so each is checked on its own. The registration and dispatch programs currently live on separate VTN deployments, so pass the programs from both.
+- `validate_programs_lock_step(programs)` checks that the registration program and every dispatch program advertise the same 1.1.z version. The registration and dispatch programs currently live on separate VTN deployments, so pass the programs from both.
 - `validate_flex_dispatch_event_compliant(event, max_duration=..., max_callable_kw=...)` takes the `MAX_DURATION` and `ACTIVE_AVAILABLE_FLEX` of the targeted resource group as keyword-only arguments and checks the dispatch intervals against them.
 - `validate_flex_delivery_report_compliant(report, event_intervals=...)` takes the intervals of the FLEX event as a keyword-only argument and checks that the delivery report has one matching interval per event interval.
 
