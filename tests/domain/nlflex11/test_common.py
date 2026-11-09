@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from openadr3_client_nlflex_compliance.nlflex11._common import (
@@ -13,6 +15,7 @@ from openadr3_client_nlflex_compliance.nlflex11._common import (
     is_power_value,
     is_registration_operator,
     is_uuid,
+    local_day_length,
 )
 
 # --- Operator identifiers -----------------------------------------------------------------------
@@ -186,3 +189,26 @@ def test_the_specifications_fictional_dso_code_is_not_a_dso_identifier() -> None
     """The worked examples use a fictional EAN13 as a placeholder; it names no real DSO."""
     assert is_ean13("8719876543215")
     assert not is_dso_identifier("8719876543215")
+
+
+# --- Local calendar days ------------------------------------------------------------------------
+
+
+def test_an_ordinary_day_is_24_hours() -> None:
+    """2026-01-02 has no DST transition, so local midnight to local midnight is PT24H."""
+    assert local_day_length(datetime(2026, 1, 1, 23, 0, 0, tzinfo=UTC)) == timedelta(hours=24)
+
+
+def test_the_spring_dst_day_is_23_hours() -> None:
+    """DST starts on 2026-03-29, which loses the hour from 02:00 to 03:00 local time."""
+    assert local_day_length(datetime(2026, 3, 28, 23, 0, 0, tzinfo=UTC)) == timedelta(hours=23)
+
+
+def test_the_autumn_dst_day_is_25_hours() -> None:
+    """DST ends on 2026-10-25, which repeats the hour from 02:00 to 03:00 local time."""
+    assert local_day_length(datetime(2026, 10, 24, 22, 0, 0, tzinfo=UTC)) == timedelta(hours=25)
+
+
+def test_a_non_midnight_start_has_no_day_length() -> None:
+    """08:00 local time is the publication deadline, not the start of a day."""
+    assert local_day_length(datetime(2026, 1, 2, 7, 0, 0, tzinfo=UTC)) is None

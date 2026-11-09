@@ -4,9 +4,11 @@
 
 """Shared building blocks for the OpenADR DER profile specification v1.1.0 compliance validators."""
 
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Final
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
@@ -199,3 +201,39 @@ def as_power_value(value: object) -> float | None:
 def is_power_value(value: object) -> bool:
     """Validates that the value is a double in KW with at most two decimal places."""
     return as_power_value(value) is not None
+
+
+# --------------------------------------------------------------------------------------------------------------
+# Local time: the day boundaries of the OpenADR DER profile specification v1.1.0.
+#
+# Every timestamp in a message is written in UTC, but "Timestamps and durations" sets day boundaries in
+# local time, Amsterdam time. A local calendar day therefore lasts 23, 24 or 25 hours in UTC, depending on
+# whether DST starts, nothing happens, or DST ends that day. Signals in this profile are expressed per
+# 15 minute window.
+# --------------------------------------------------------------------------------------------------------------
+
+LOCAL_TIMEZONE: Final = ZoneInfo("Europe/Amsterdam")
+
+FIFTEEN_MINUTES: Final = timedelta(minutes=15)
+
+
+def local_day_length(start: datetime) -> timedelta | None:
+    """
+    Measures the local calendar day that begins at the given instant.
+
+    Args:
+        start: An aware datetime, usually in UTC as the profile writes it.
+
+    Returns:
+        The length of the local calendar day in UTC, or None when `start` is not a local midnight.
+
+    """
+    local_start = start.astimezone(LOCAL_TIMEZONE)
+    if local_start.time() != time():
+        return None
+
+    # The end is anchored at its own local midnight: start plus 24 hours lands an hour off on the two
+    # DST transition days. Both ends are converted to UTC before subtracting, because Python subtracts
+    # two datetimes sharing one tzinfo by wall clock, which would make every day 24 hours long.
+    local_end = datetime.combine(local_start.date() + timedelta(days=1), time(), LOCAL_TIMEZONE)
+    return local_end.astimezone(UTC) - local_start.astimezone(UTC)
