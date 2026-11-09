@@ -5,14 +5,18 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import pytest
+from openadr3_client._models.common.attribute import Attribute
 from openadr3_client._models.common.interval import Interval
 from openadr3_client._models.common.interval_period import IntervalPeriod
+from openadr3_client._models.common.value_map_collection import ValuesMap
 from openadr3_client.oadr310.models.event.event import NewEvent
 from openadr3_client.oadr310.models.event.event_payload import (
     EventPayload,
     EventPayloadDescriptor,
     EventPayloadType,
 )
+from openadr3_client.oadr310.models.program.program import ExistingProgram, NewProgram
 from openadr3_client.oadr310.models.report.report_payload import (
     ReportDescriptor,
     ReportIntervals,
@@ -25,6 +29,7 @@ from openadr3_client_nlflex_compliance.nlflex11.event_nlflex_compliant import (
     event_kind,
     validate_baseline_event_compliant,
     validate_event_nlflex_compliant,
+    validate_event_program_ownership,
     validate_flex_delta_override_event_compliant,
     validate_flex_dispatch_event_compliant,
     validate_reporting_anchor_event_compliant,
@@ -1384,3 +1389,89 @@ def test_a_boolean_flex_value_is_rejected() -> None:
 
     assert errors is not None
     assert any("at most two decimals" in str(error["type"]) for error in errors)
+
+
+PROGRAM_ID = "dbb3ec95-d96d-449c-b991-154b77491bcd"
+
+
+def _program(program_type: str, program_id: str = PROGRAM_ID) -> ExistingProgram:
+    """Helper function to create a stored program of a given PROGRAM_TYPE."""
+    return ExistingProgram(
+        id=program_id,
+        created_date_time=WINDOW_START,
+        modification_date_time=WINDOW_START,
+        program_name="DER program",
+        attributes=ValuesMap([Attribute(type="PROGRAM_TYPE", values=(program_type,))]),
+    )
+
+
+def _registration_program(program_id: str = PROGRAM_ID) -> ExistingProgram:
+    return _program("DER_REGISTRATION_INTERFACE-1.1.0", program_id)
+
+
+def _dispatch_program(program_id: str = PROGRAM_ID) -> ExistingProgram:
+    return _program("DER_DISPATCH_INTERFACE-1.1.0", program_id)
+
+
+@pytest.mark.parametrize("event", [_anchor_event(), _baseline_event(), _override_event()])
+def test_registration_events_belong_in_the_registration_program(event: NewEvent) -> None:
+    """The reporting anchor, baseline and flex delta override events live in the registration program."""
+    assert validate_event_program_ownership(event, _registration_program()) == []
+
+
+def test_a_flex_event_belongs_in_a_dispatch_program() -> None:
+    """A FLEX event lives in a dispatch program."""
+    assert validate_event_program_ownership(_dispatch_event(), _dispatch_program()) == []
+
+
+def test_a_baseline_event_in_a_dispatch_program_is_rejected() -> None:
+    """The DSO BL only creates FLEX events, so a baseline event does not belong in a dispatch program."""
+    errors = validate_event_program_ownership(_baseline_event(), _dispatch_program())
+
+    assert len(errors) == 1
+    assert "registration program" in str(errors[0]["type"])
+
+
+def test_a_flex_event_in_the_registration_program_is_rejected() -> None:
+    """A FLEX event does not belong in the registration program."""
+    errors = validate_event_program_ownership(_dispatch_event(), _registration_program())
+
+    assert len(errors) == 1
+    assert "dispatch program" in str(errors[0]["type"])
+
+
+def test_an_event_naming_another_program_id_is_rejected() -> None:
+    """The programID of the event must be the id of the program it is checked against."""
+    errors = validate_event_program_ownership(
+        _baseline_event(), _registration_program("c0000000-0000-4000-8000-000000000000")
+    )
+
+    assert len(errors) == 1
+    assert "programID" in str(errors[0]["type"])
+
+
+def test_a_program_not_yet_stored_is_checked_on_its_kind_only() -> None:
+    """A new program has no id yet, so only the kind of program is compared."""
+    new_program = NewProgram(
+        program_name="DER program",
+        attributes=ValuesMap([Attribute(type="PROGRAM_TYPE", values=("DER_DISPATCH_INTERFACE-1.1.0",))]),
+    )
+
+    assert validate_event_program_ownership(_dispatch_event(), new_program) == []
+    assert len(validate_event_program_ownership(_baseline_event(), new_program)) == 1
+
+
+def test_an_event_or_program_of_no_known_kind_is_left_to_their_own_validators() -> None:
+    """Ownership is only judged when both kinds are known."""
+    unknown_event = NewEvent(
+        programID=PROGRAM_ID,
+        targets=("GROUP-0001",),
+        payload_descriptors=(EventPayloadDescriptor(payload_type=EventPayloadType.PRICE),),
+        intervals=(
+            Interval(id=0, interval_period=None, payloads=(EventPayload(type=EventPayloadType.PRICE, values=(10,)),)),
+        ),
+    )
+
+    assert event_kind(unknown_event) is None
+    assert validate_event_program_ownership(unknown_event, _registration_program()) == []
+    assert validate_event_program_ownership(_baseline_event(), _program("NOT_A_KIND")) == []
