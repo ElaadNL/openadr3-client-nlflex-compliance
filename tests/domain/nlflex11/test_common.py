@@ -11,12 +11,32 @@ from openadr3_client_nlflex_compliance.nlflex11._common import (
     is_ean13,
     is_ean18,
     is_power_value,
+    is_registration_operator,
     is_uuid,
 )
 
+# --- Operator identifiers -----------------------------------------------------------------------
+
+
+def test_gopacs_is_the_registration_operator() -> None:
+    """GOPACS has no EAN13 and is identified by the string GOPACS (see "Operator identifiers")."""
+    assert is_registration_operator("GOPACS")
+
+
+def test_gopacs_is_not_a_dso() -> None:
+    """The registration operator is not one of the DSOs in the operator identifiers table."""
+    assert not is_dso_identifier("GOPACS")
+
+
+def test_a_dso_is_not_the_registration_operator() -> None:
+    """The match is exact: a DSO EAN13 and a differently cased name are not GOPACS."""
+    assert not is_registration_operator("8716871000002")
+    assert not is_registration_operator("gopacs")
+
+
 # --- Identifiers (EAN13, EAN18, UUID) ---------------------------------------------------------
 
-# The six DSO identifiers of the "DSO identifiers" table, plus the two fictional EAN13 codes the
+# The six DSO identifiers of the "Operator identifiers" table, plus the two fictional EAN13 codes the
 # specification's examples use for a DSO and a Service Provider.
 SPEC_EAN13_IDENTIFIERS = (
     "8716916000004",
