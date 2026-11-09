@@ -724,7 +724,7 @@ def validate_flex_delta_override_event_compliant(event: Event) -> list[InitError
 #   day, is checked.
 # - Notation rules are lost when the message is parsed into the model: timestamps written in Zulu
 #   notation, and durations written in hours rather than days (PT24H, not P1D). They are checked
-#   against the raw input instead.
+#   against the raw input instead, by the functions in the `raw_input` module.
 # --------------------------------------------------------------------------------------------------------------
 
 FLEX_PAYLOAD_TYPE = EventPayloadType("FLEX")
