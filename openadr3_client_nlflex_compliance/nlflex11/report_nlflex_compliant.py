@@ -735,8 +735,8 @@ def _client_name_compliant(report: Report) -> list[InitErrorDetails]:
     if not is_ean13(report.client_name):
         return [
             error(
-                "The report clientName must be the venName of the VEN submitting it, which is the aggregator "
-                "identifier: an EAN13 of 13 digits with a valid check digit.",
+                "The report clientName must be the venName of the VEN client submitting it, which is the "
+                "aggregator identifier: an EAN13 of 13 digits with a valid check digit.",
                 "client_name",
                 report.client_name,
             )

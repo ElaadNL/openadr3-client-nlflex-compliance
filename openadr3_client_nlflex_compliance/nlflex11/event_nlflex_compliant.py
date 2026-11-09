@@ -79,8 +79,8 @@ def _anchor_targets_compliant(self: Event) -> list[InitErrorDetails]:
     if self.targets:
         return [
             error(
-                "The reporting anchor event must not define any targets. It is public, so every VEN in the "
-                "program can see it and report against it.",
+                "The reporting anchor event must not define any targets. It is public, so every VEN client in "
+                "the program can see it and report against it.",
                 "targets",
                 self.targets,
             )
@@ -157,7 +157,7 @@ def _anchor_report_descriptors_compliant(self: Event) -> list[InitErrorDetails]:
             validation_errors.append(
                 error(
                     f"The '{payload_type}' report descriptor must set frequency to 0 and repeat to -1, so that "
-                    "the VEN reports at moments of its own choosing for the whole time the program is in use.",
+                    "the VEN client reports at moments of its own choosing for the whole time the program is in use.",
                     "report_descriptors",
                     self.report_descriptors,
                 )
@@ -307,7 +307,7 @@ def _baseline_report_descriptors_compliant(self: Event) -> list[InitErrorDetails
             validation_errors.append(
                 error(
                     f"The baseline event must include exactly one report descriptor for '{payload_type}', "
-                    "instructing the VEN to submit a flex delta report in response to this event.",
+                    "instructing the VEN client to submit a flex delta report in response to this event.",
                     "report_descriptors",
                     self.report_descriptors,
                 )
@@ -1301,7 +1301,9 @@ def validate_event_program_ownership(event: Event, program: Program) -> list[Ini
     anchor, baseline and flex delta override events in the registration program, and a DSO creates
     FLEX events in its dispatch program. This is a rule over an event and its program together, so it
     is not part of the per-event validator and is exported for callers that hold both.
-    An event or a program of no known kind is left out: their own validators already report them.
+    The programID of the event must be the id of the program whatever their kinds. The kind of program
+    is only judged when both kinds are known: an event or a program of no known kind is already reported
+    by its own validator.
 
     Args:
         event: The event to check.
@@ -1311,11 +1313,6 @@ def validate_event_program_ownership(event: Event, program: Program) -> list[Ini
         One error per broken rule, or an empty list.
 
     """
-    kind = event_kind(event)
-    actual_program_kind = program_kind(program)
-    if kind is None or actual_program_kind is None:
-        return []
-
     errors: list[InitErrorDetails] = []
 
     # A program not yet stored on the VTN has no id to compare with.
@@ -1323,10 +1320,15 @@ def validate_event_program_ownership(event: Event, program: Program) -> list[Ini
         errors.append(
             error(
                 f"The programID of the event must be the id of the program it belongs to, {program.id}.",
-                "programID",
+                "program_id",
                 event.program_id,
             )
         )
+
+    kind = event_kind(event)
+    actual_program_kind = program_kind(program)
+    if kind is None or actual_program_kind is None:
+        return errors
 
     required_program_kind = _OWNING_PROGRAM_KIND[kind]
     if actual_program_kind is not required_program_kind:
@@ -1334,7 +1336,7 @@ def validate_event_program_ownership(event: Event, program: Program) -> list[Ini
             error(
                 f"A {kind.value.lower()} event must be created in the {required_program_kind.value.lower()} "
                 f'program (see "Program"), but its program is a {actual_program_kind.value.lower()} program.',
-                "programID",
+                "program_id",
                 event.program_id,
             )
         )

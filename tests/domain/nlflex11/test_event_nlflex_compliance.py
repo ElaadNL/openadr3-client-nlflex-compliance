@@ -1588,6 +1588,7 @@ def test_a_baseline_event_in_a_dispatch_program_is_rejected() -> None:
 
     assert len(errors) == 1
     assert "registration program" in str(errors[0]["type"])
+    assert errors[0]["loc"] == ("program_id",)
 
 
 def test_a_flex_event_in_the_registration_program_is_rejected() -> None:
@@ -1596,6 +1597,7 @@ def test_a_flex_event_in_the_registration_program_is_rejected() -> None:
 
     assert len(errors) == 1
     assert "dispatch program" in str(errors[0]["type"])
+    assert errors[0]["loc"] == ("program_id",)
 
 
 def test_an_event_naming_another_program_id_is_rejected() -> None:
@@ -1606,6 +1608,7 @@ def test_an_event_naming_another_program_id_is_rejected() -> None:
 
     assert len(errors) == 1
     assert "programID" in str(errors[0]["type"])
+    assert errors[0]["loc"] == ("program_id",)
 
 
 def test_a_program_not_yet_stored_is_checked_on_its_kind_only() -> None:
@@ -1619,9 +1622,9 @@ def test_a_program_not_yet_stored_is_checked_on_its_kind_only() -> None:
     assert len(validate_event_program_ownership(_baseline_event(), new_program)) == 1
 
 
-def test_an_event_or_program_of_no_known_kind_is_left_to_their_own_validators() -> None:
-    """Ownership is only judged when both kinds are known."""
-    unknown_event = NewEvent(
+def _unknown_kind_event() -> NewEvent:
+    """Helper function to create an event whose payload types match no kind of event in this profile."""
+    return NewEvent(
         programID=PROGRAM_ID,
         targets=("GROUP-0001",),
         payload_descriptors=(EventPayloadDescriptor(payload_type=EventPayloadType.PRICE),),
@@ -1630,6 +1633,22 @@ def test_an_event_or_program_of_no_known_kind_is_left_to_their_own_validators() 
         ),
     )
 
+
+def test_an_event_or_program_of_no_known_kind_is_left_to_their_own_validators() -> None:
+    """The kind of program is only judged when both kinds are known."""
+    unknown_event = _unknown_kind_event()
+
     assert event_kind(unknown_event) is None
     assert validate_event_program_ownership(unknown_event, _registration_program()) == []
     assert validate_event_program_ownership(_baseline_event(), _program("NOT_A_KIND")) == []
+
+
+def test_an_event_of_no_known_kind_naming_another_program_id_is_rejected() -> None:
+    """The programID check does not depend on the kind of event, so it runs for an unknown kind too."""
+    errors = validate_event_program_ownership(
+        _unknown_kind_event(), _registration_program("c0000000-0000-4000-8000-000000000000")
+    )
+
+    assert len(errors) == 1
+    assert "programID" in str(errors[0]["type"])
+    assert errors[0]["loc"] == ("program_id",)

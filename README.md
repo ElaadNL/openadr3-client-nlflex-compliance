@@ -61,7 +61,7 @@ The plugin sees one object at a time, so rules that compare objects are not regi
 - `validate_flex_dispatch_event_compliant(event, max_duration=..., max_callable_kw=...)` takes the `MAX_DURATION` and `ACTIVE_AVAILABLE_FLEX` of the targeted resource group as keyword-only arguments and checks the dispatch intervals against them.
 - `validate_flex_delivery_report_compliant(report, event_intervals=...)` takes the intervals of the FLEX event as a keyword-only argument and checks that the delivery report has one matching interval per event interval.
 
-Each returns a list of errors, which you raise or report the same way as above.
+`validate_event_program_ownership` and `validate_programs_lock_step` return a list of errors, empty when compliant. `validate_flex_dispatch_event_compliant` and `validate_flex_delivery_report_compliant` return a list of errors, or None when compliant. Raise or report the errors the same way as above.
 
 ## License
 
